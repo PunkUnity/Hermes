@@ -402,7 +402,10 @@ int main(int argc, char *argv[]) {
         800,
         600,
         60,
-        probe_uuid
+        probe_uuid,
+        std::nullopt,
+        VDISPLAY::virtual_display_layout_e::extend,
+        config::video.hermes_kms_isolated_sessions
       );
 #endif
 
