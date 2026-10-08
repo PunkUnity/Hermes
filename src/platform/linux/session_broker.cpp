@@ -364,4 +364,23 @@ namespace platf::session_broker {
     return succeeded(ask("STOP " + client_uuid + "\n"), "STOP").has_value();
   }
 
+  std::optional<std::string> start_self(const std::string &seat,
+    const std::vector<std::string> &arguments,
+    const std::vector<std::string> &environment) {
+    if (seat.empty() || arguments.empty()) return std::nullopt;
+    std::string q = "START_SELF " + seat + "\n";
+    for (const auto &x : arguments) q += "ARG " + x + "\n";
+    for (const auto &x : environment) q += "ENV " + x + "\n";
+    q += "END\n";
+    const auto r = succeeded(ask(q), "START_SELF");
+    return r && !r->empty() ? std::optional<std::string>{r->front()} : std::nullopt;
+  }
+  bool self_active(const std::string &seat) {
+    const auto r = succeeded(ask("STATUS_SELF " + seat + "\n"), "STATUS_SELF");
+    return r && !r->empty() && (r->front()=="active" || r->front()=="activating" || r->front()=="reloading");
+  }
+  bool stop_self(const std::string &seat) {
+    return succeeded(ask("STOP_SELF " + seat + "\n"), "STOP_SELF").has_value();
+  }
+
 }  // namespace platf::session_broker

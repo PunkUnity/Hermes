@@ -683,6 +683,50 @@ namespace {
    * seat does not come from here - it takes that through seatd - so no logind
    * session and no PAM stack is involved.
    */
+
+  bool valid_self_seat(std::string_view seat) {
+    constexpr std::string_view p = "hermes-kms-";
+    if (!seat.starts_with(p) || seat.size() <= p.size()) return false;
+    for (char c : seat.substr(p.size())) if (!std::isdigit((unsigned char)c)) return false;
+    return true;
+  }
+  std::string self_unit(uid_t uid, std::string_view seat) {
+    return "hermes-desktop-u" + std::to_string((unsigned)uid) + "-" + std::string{seat} + ".service";
+  }
+  std::string self_state(uid_t uid, const std::string &seat) {
+    const auto unit=self_unit(uid,seat), ctl=locate({"/usr/bin/systemctl","/bin/systemctl"});
+    if (ctl.empty()) return {};
+    std::string state;
+    if (!run_capture({ctl,"show","--property=ActiveState","--value",unit},state)) return {};
+    return trim(state);
+  }
+  std::string handle_start_self(uid_t uid,const std::string &seat,
+    const std::vector<std::string> &args,const std::vector<std::string> &env) {
+    if (!valid_self_seat(seat) || args.empty() || !args.front().starts_with('/')) return "ERR request bad START_SELF";
+    const auto *pw=::getpwuid(uid); if (!pw) return "ERR state no passwd entry";
+    const auto runbin=locate({"/usr/bin/systemd-run","/bin/systemd-run"}); if (runbin.empty()) return "ERR provision no systemd-run";
+    const auto unit=self_unit(uid,seat), st=self_state(uid,seat);
+    if (!st.empty() && st!="inactive" && st!="failed") return "ERR busy detached desktop already running";
+    std::vector<std::string> av{runbin,"--quiet","--collect","--unit="+unit,
+      "--uid="+std::string{pw->pw_name},"--description=Hermes detached desktop on "+seat,
+      "--property=WorkingDirectory="+std::string{pw->pw_dir},"--property=PAMName=system-login"};
+    for (const auto &x:env) {
+      if (x.starts_with("XDG_RUNTIME_DIR=")||x.starts_with("XDG_SESSION_ID=")||x.starts_with("XDG_SEAT=")||
+          x.starts_with("XDG_SESSION_TYPE=")||x.starts_with("XDG_SESSION_CLASS=")) continue;
+      av.push_back("--setenv="+x);
+    }
+    av.push_back("--setenv=XDG_SEAT="+seat); av.push_back("--setenv=XDG_SESSION_TYPE=wayland");
+    av.push_back("--setenv=XDG_SESSION_CLASS=user"); av.emplace_back("--"); av.insert(av.end(),args.begin(),args.end());
+    if (!run(av)) return "ERR provision systemd-run refused same-user session";
+    status_cache.store(unit,"activating"); return "OK "+unit;
+  }
+  std::string handle_stop_self(uid_t uid,const std::string &seat) {
+    if (!valid_self_seat(seat)) return "ERR request bad STOP_SELF";
+    const auto unit=self_unit(uid,seat), ctl=locate({"/usr/bin/systemctl","/bin/systemctl"});
+    if (ctl.empty() || !run({ctl,"stop",unit})) return "ERR provision stop failed";
+    status_cache.store(unit,"inactive"); return "OK";
+  }
+
   std::string handle_start(
     const options_t &options,
     const std::string &client_id,
@@ -923,7 +967,7 @@ namespace {
     return "OK";
   }
 
-  std::string handle_request(const options_t &options, const std::vector<std::string> &lines) {
+  std::string handle_request(const options_t &options, uid_t peer, const std::vector<std::string> &lines) {
     const auto &request = lines.front();
     const auto split = request.find(' ');
     const auto verb = trim(split == std::string::npos ? request : request.substr(0, split));
@@ -942,8 +986,19 @@ namespace {
     }
 
     if (verb != "ENSURE" && verb != "LOOKUP" && verb != "PURGE" && verb != "START" &&
-        verb != "STOP" && verb != "STATUS" && verb != "SOCKET") {
+        verb != "STOP" && verb != "STATUS" && verb != "SOCKET" && verb != "START_SELF" && verb != "STOP_SELF" && verb != "STATUS_SELF") {
       return "ERR request unknown verb";
+    }
+    if (verb=="STATUS_SELF") return "OK "+self_state(peer,argument)+" "+self_unit(peer,argument);
+    if (verb=="STOP_SELF") return handle_stop_self(peer,argument);
+    if (verb=="START_SELF") {
+      std::vector<std::string> a,e;
+      for (size_t i=1;i<lines.size();++i) {
+        if (lines[i]=="END") break;
+        if (lines[i].starts_with("ARG ")) a.emplace_back(lines[i].substr(4));
+        else if (lines[i].starts_with("ENV ")) { auto x=lines[i].substr(4); if (valid_env_assignment(x)) e.emplace_back(x); }
+      }
+      return handle_start_self(peer,argument,a,e);
     }
     if (!valid_client_id(argument)) {
       return "ERR request the client identifier is missing or malformed";
@@ -1207,7 +1262,7 @@ namespace {
         ::flock(lock_fd, LOCK_EX);
       }
     }
-    const auto reply = handle_request(options, *request);
+    const auto reply = handle_request(options, *uid, *request);
     if (lock_fd >= 0) {
       ::close(lock_fd);  // Releases the lock.
     }

@@ -396,7 +396,7 @@ int main(int argc, char *argv[]) {
         *probe_guid
       );
 #else
-      VDISPLAY::createVirtualDisplay(
+      const auto probe_display_name = VDISPLAY::createVirtualDisplay(
         probe_uuid_str.c_str(),
         "Probe",
         800,
@@ -405,10 +405,17 @@ int main(int argc, char *argv[]) {
         probe_uuid,
         std::nullopt,
         VDISPLAY::virtual_display_layout_e::extend,
-        config::video.hermes_kms_isolated_sessions
+        false
       );
 #endif
 
+#ifndef _WIN32
+      const auto previous_output = config::video.output_name;
+      if (!probe_display_name.empty()) {
+        auto mapped_name = display_device::map_display_name(probe_display_name);
+        config::video.output_name = mapped_name.empty() ? probe_display_name : std::move(mapped_name);
+      }
+#endif
       std::this_thread::sleep_for(500ms);
 
       // Probe again anyways
@@ -419,6 +426,9 @@ int main(int argc, char *argv[]) {
           BOOST_LOG(error) << "Video failed to find working encoder even after attempted with a virtual display"sv;
         }
       }
+#ifndef _WIN32
+      config::video.output_name = previous_output;
+#endif
 
 #ifdef _WIN32
       VDISPLAY::removeVirtualDisplay(*probe_guid);

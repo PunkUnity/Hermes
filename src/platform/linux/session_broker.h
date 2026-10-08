@@ -102,4 +102,10 @@ namespace platf::session_broker {
    */
   bool stop(const std::string &client_uuid);
 
+  std::optional<std::string> start_self(const std::string &seat,
+    const std::vector<std::string> &arguments,
+    const std::vector<std::string> &environment);
+  bool self_active(const std::string &seat);
+  bool stop_self(const std::string &seat);
+
 }  // namespace platf::session_broker
