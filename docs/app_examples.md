@@ -376,6 +376,8 @@ broker for the Hermes user with
 one broker per session card; Hermes assigns the corresponding private broker
 socket to the compositor automatically.
 
+With `hermes_kms_session_compositor = plasma`, the independent `desktop` profile is instead the user's own Plasma desktop, detached: it runs as the same user with the same home, files and settings, on a virtual KWin output that no physical monitor or local keyboard and mouse can reach. It needs no Hermes-KMS card or seatd, and it does not run `cmd`, `detached` or prep commands.
+
 #### Linux (Flatpak)
 
 > [!CAUTION]
