@@ -261,6 +261,12 @@ namespace proc {
      */
     std::string isolated_audio_sink(uint32_t launch_session_id);
 
+    /**
+     * @brief Whether an isolated session runs under a helper account of its
+     *        own, whose audio server the host's cannot reach.
+     */
+    bool isolated_session_has_account(uint32_t launch_session_id);
+
     /** Reattach launch metadata to a still-running client runtime. */
     bool prepare_isolated_resume(
       std::shared_ptr<rtsp_stream::launch_session_t> launch_session

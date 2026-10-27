@@ -1319,11 +1319,12 @@ namespace rtsp_stream {
     // exactly as it was.
     // A resumed connection has a new launch ID, but the retained desktop and
     // its sink still belong to the original runtime.
-    config.audio.session_sink = proc::proc.isolated_audio_sink(
-      session.isolated_session ? session.isolated_runtime_owner_id : session.id
-    );
+    const auto runtime_owner = session.isolated_session ? session.isolated_runtime_owner_id : session.id;
+    config.audio.session_sink = proc::proc.isolated_audio_sink(runtime_owner);
+    // A desktop on a helper account plays into that account's own audio
+    // server, so it never has a sink here; only a same-user desktop must.
     if (session.isolated_session && session.isolated_session_profile == "desktop" &&
-        config.audio.session_sink.empty()) {
+        config.audio.session_sink.empty() && !proc::proc.isolated_session_has_account(runtime_owner)) {
       BOOST_LOG(error) << "[IsolatedSession] The detached desktop has no private audio sink; "
                           "refusing to capture host audio.";
       respond(sock, session, &option, 503, "Service Unavailable", req->sequenceNumber, {});
