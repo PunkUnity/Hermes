@@ -403,6 +403,11 @@ int main(int argc, char **argv) {
     // would replace the session the host restores next. A system value marked
     // immutable outranks the user's ksmserverrc, which stays untouched.
     write_private(root / "xdg/ksmserverrc", "[General]\nloginMode[$i]=emptySession\n");
+    // Plasma's network agent manages the machine's connections, which belong
+    // to whoever is at the machine, and asks polkit for an active session this
+    // desktop does not have. This only keeps KDED from loading it at startup;
+    // it can still be loaded on demand.
+    write_private(root / "xdg/kded5rc", "[Module-networkmanagement]\nautoload[$i]=false\n");
     auto config_dirs = env("XDG_CONFIG_DIRS");
     if (config_dirs.empty()) {
       config_dirs = "/etc/xdg";
