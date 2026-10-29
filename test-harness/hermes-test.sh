@@ -17,6 +17,8 @@ mkdir -p "$logdir"
 log="$logdir/${mode:-none}-$(date +%Y%m%d-%H%M%S).log"
 table=hermes_hold_test
 follower=
+# Every way Hermes reports the end of a stream.
+ended='Session ended|Ping Timeout|CLIENT DISCONNECTED'
 
 say() { printf '%s  %s\n' "$(date +%T)" "$*" | tee -a "$log"; }
 
@@ -56,10 +58,11 @@ stream_ports() {
 }
 
 wait_for_end() {
-  # Seconds until Hermes logs the end of a stream, or nothing after $1 seconds.
+  # Seconds until Hermes logs the end of a stream after log line $2, or
+  # nothing after $1 seconds.
   local start=$SECONDS
   while [ $((SECONDS - start)) -lt "$1" ]; do
-    if grep -q -E 'Session ended|Ping Timeout|CLIENT DISCONNECTED' "$log"; then
+    if tail -n +"$2" "$log" | grep -q -E "$ended"; then
       echo $((SECONDS - start))
       return 0
     fi
@@ -82,15 +85,33 @@ case "$mode" in
     say "hold test: logging to $log; stream ports udp $ports"
     snapshot "before"
     follow_hermes
+    # Count the stream's packets first: the test only means something while a
+    # stream is actually running.
+    sudo -n nft delete table inet "$table" 2>/dev/null
+    sudo -n nft add table inet "$table"
+    sudo -n nft add chain inet "$table" input '{ type filter hook input priority -50; }'
+    sudo -n nft add rule inet "$table" input udp dport "$ports" counter
+    say "waiting for a live stream: open Detached in Artemis, full screen"
+    live=
+    for _ in $(seq 1 120); do
+      a=$(sudo -n nft list table inet "$table" | sed -n 's/.*packets \([0-9]*\).*/\1/p')
+      sleep 1
+      b=$(sudo -n nft list table inet "$table" | sed -n 's/.*packets \([0-9]*\).*/\1/p')
+      if [ $((b - a)) -ge 5 ]; then live=$((b - a)); break; fi
+    done
+    if [ -z "$live" ]; then
+      say "RESULT: INVALID, no stream was running within 2 minutes; nothing was tested"
+      exit 1
+    fi
+    say "stream is live (${live} packets/s from the client)"
     for left in 15 10 5; do
       say "block in $left s: be in Artemis, start holding now"
       sleep 5
     done
-    sudo -n nft add table inet "$table"
-    sudo -n nft add chain inet "$table" input '{ type filter hook input priority -50; }'
+    from=$(($(wc -l <"$log") + 1))
     sudo -n nft add rule inet "$table" input udp dport "$ports" drop
     say "BLOCKED: stream traffic dropped (IPv4 and IPv6). Keep holding."
-    if took=$(wait_for_end 40); then
+    if took=$(wait_for_end 40 "$from"); then
       say "Hermes ended the stream ${took} s after the block, while held"
       result=ended
     else
@@ -103,9 +124,9 @@ case "$mode" in
     sleep 60
     snapshot "after reconnect"
     say "--- Hermes log during the test"
-    grep -E 'Session ended|Ping Timeout|CLIENT DISCONNECTED|streaming session|rror|arning' "$log" | grep -v -- '---' | tail -20
+    grep -E "$ended|streaming session|rror|arning" "$log" | tail -20
     if [ "$result" = ended ]; then
-      say "RESULT: stream ended while held. Now check the pointer: moves freely = PASS"
+      say "RESULT: stream ended while held. PASS if input now behaves normally (pointer moves freely, taps and scrolling work)"
     else
       say "RESULT: INVALID, the stream was not cut; nothing was tested"
     fi
