@@ -3350,8 +3350,10 @@ namespace video {
     const auto &encoder = *chosen_encoder;
     const auto name = stream.display_name.empty() ? display_device::map_output_name(config::video.output_name) : stream.display_name;
     // Name what is captured as the user knows it: the output, and how.
-    const auto label = (name.empty() ? "the primary display"s : "display ["s + name + ']') +
-                       (config::video.capture.empty() ? ""s : " via "s + config::video.capture);
+    const auto label = !stream.kwin_wayland_socket.empty() ?
+                         "the detached desktop via KWin screencast"s :
+                         (name.empty() ? "the primary display"s : "display ["s + name + ']') +
+                           (config::video.capture.empty() ? ""s : " via "s + config::video.capture);
 
     // The stream's display, as an H.264 SDR stream: every encoder has it.
     config_t config = stream;
