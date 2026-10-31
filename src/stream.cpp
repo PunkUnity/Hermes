@@ -478,6 +478,8 @@ namespace stream {
 
     /// Times the client lost video that error correction could not repair.
     std::atomic<unsigned int> video_recoveries {0};
+    /// Every client asks for a key frame once as the stream starts.
+    bool first_key_frame_requested {false};
     /// The current minute of those, and whether the link warning was given;
     /// the control thread owns them.
     std::chrono::steady_clock::time_point recovery_window_start {};
@@ -1088,7 +1090,10 @@ namespace stream {
     server->map(packetTypes[IDX_REQUEST_IDR_FRAME], [&](session_t *session, const std::string_view &payload) {
       BOOST_LOG(debug) << "type [IDX_REQUEST_IDR_FRAME]"sv;
       note_recovery_after_silence(*session, "a key frame"sv);
-      note_video_loss(*session);
+      // The first request starts the stream; later ones recover lost video.
+      if (std::exchange(session->first_key_frame_requested, true)) {
+        note_video_loss(*session);
+      }
 
       session->video.idr_events->raise(true);
     });
