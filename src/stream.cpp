@@ -475,6 +475,14 @@ namespace stream {
     client_link_monitor_t client_link;
     /// Silences logged individually so far; the control thread owns it.
     unsigned int client_silences_logged {0};
+
+    /// Times the client lost video that error correction could not repair.
+    std::atomic<unsigned int> video_recoveries {0};
+    /// The current minute of those, and whether the link warning was given;
+    /// the control thread owns them.
+    std::chrono::steady_clock::time_point recovery_window_start {};
+    unsigned int recovery_window_count {0};
+    bool link_warning_logged {false};
   };
 
   // A client on a bad link can go silent every second; past this many the
@@ -495,6 +503,42 @@ namespace stream {
    * Say so when a recovery request follows a silence: the frames sent while
    * the client was unreachable are the ones it is asking to replace.
    */
+  /**
+   * What the stream needs on the network, in Mbps: the video bitrate, the
+   * error correction sent on top of it, and roughly 4% of packet headers.
+   */
+  double stream_wire_mbps(const session_t &session) {
+    const double video = session.config.monitor.bitrate / 1000.0;
+    return video * (100 + config::stream.fec_percentage) / 100.0 * 1.04;
+  }
+
+  /**
+   * A client asks for a key frame or invalidates reference frames when video
+   * it lost was beyond what error correction could repair. Now and then that
+   * is a dropped packet; several times a minute it is a link that cannot
+   * carry the stream, which looks like lag and latency spikes on the client
+   * and nothing at all on the host. Say so once, with the numbers.
+   */
+  void note_video_loss(session_t &session) {
+    using namespace std::literals;
+    ++session.video_recoveries;
+    const auto now = std::chrono::steady_clock::now();
+    if (now - session.recovery_window_start > 60s) {
+      session.recovery_window_start = now;
+      session.recovery_window_count = 0;
+    }
+    if (++session.recovery_window_count < 5 || session.link_warning_logged) {
+      return;
+    }
+    session.link_warning_logged = true;
+    BOOST_LOG(warning) << "Client ["sv << session.device_name << "] lost video "sv << session.recovery_window_count
+                       << " times within a minute, beyond what error correction could repair. At "sv
+                       << session.config.monitor.bitrate / 1000 << " Mbps with "sv << config::stream.fec_percentage
+                       << "% error correction the stream needs about "sv << static_cast<int>(stream_wire_mbps(session) + 0.5)
+                       << " Mbps on the network; if the client's link is slower than that (a 100 Mbps Ethernet port, or Wi-Fi), "
+                          "the stream stutters and its latency spikes. Lower the bitrate in the client, or give it a faster link."sv;
+  }
+
   void note_recovery_after_silence(session_t &session, std::string_view request) {
     const auto now = std::chrono::steady_clock::now();
     if (const auto silence = session.client_link.silence_before(now)) {
@@ -1044,6 +1088,7 @@ namespace stream {
     server->map(packetTypes[IDX_REQUEST_IDR_FRAME], [&](session_t *session, const std::string_view &payload) {
       BOOST_LOG(debug) << "type [IDX_REQUEST_IDR_FRAME]"sv;
       note_recovery_after_silence(*session, "a key frame"sv);
+      note_video_loss(*session);
 
       session->video.idr_events->raise(true);
     });
@@ -1059,6 +1104,7 @@ namespace stream {
         << "lastFrame [" << lastFrame << ']';
 
       note_recovery_after_silence(*session, "reference frame invalidation"sv);
+      note_video_loss(*session);
 
       session->video.invalidate_ref_frames_events->raise(std::make_pair(firstFrame, lastFrame));
     });
@@ -2311,6 +2357,12 @@ namespace stream {
                         << client_link_monitor_t::silence_threshold.count() << " ms or more (longest "sv
                         << session.client_link.longest_silence().count() << " ms, "sv
                         << session.client_link.total_silence().count() << " ms in all)"sv;
+      }
+
+      if (const auto recoveries = session.video_recoveries.load()) {
+        BOOST_LOG(info) << "Client ["sv << session.device_name << "] recovered from lost video "sv << recoveries
+                        << (recoveries == 1 ? " time"sv : " times"sv) << " at "sv << session.config.monitor.bitrate / 1000
+                        << " Mbps (about "sv << static_cast<int>(stream_wire_mbps(session) + 0.5) << " Mbps on the network)"sv;
       }
 
       if (reason == termination_reason_e::CLIENT_LOST) {
