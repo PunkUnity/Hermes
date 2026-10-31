@@ -461,6 +461,7 @@ namespace {
       restore("XDG_CACHE_HOME", "HERMES_DETACHED_CACHE_HOME");
       restore("XDG_CONFIG_HOME", "HERMES_DETACHED_CONFIG_HOME");
       restore("XDG_CONFIG_DIRS", "HERMES_DETACHED_CONFIG_DIRS");
+      restore("QT_LOGGING_RULES", "HERMES_DETACHED_LOGGING_RULES");
       const int width = dimension(env("HERMES_DETACHED_WIDTH").c_str());
       const int height = dimension(env("HERMES_DETACHED_HEIGHT").c_str());
       const int refresh = refresh_rate(env("HERMES_DETACHED_REFRESH_MHZ"));
@@ -625,6 +626,9 @@ int main(int argc, char **argv) {
     write_private(root / "kwin-config/kwinoutputconfig.json", "[]\n");
     set("XDG_CONFIG_HOME", (root / "kwin-config").string());
     set("XDG_CONFIG_DIRS", (root / "xdg").string() + ":" + config_home + ":" + config_dirs);
+    // Test builds: what KWin does with Xwayland and the screencast.
+    remember("QT_LOGGING_RULES", "HERMES_DETACHED_LOGGING_RULES");
+    set("QT_LOGGING_RULES", "kwin_xwl*.debug=true;kwin_screencast*.debug=true;kwin_core.warning=true");
     set("HERMES_DETACHED_STAGE", "session");
     const auto self = fs::canonical("/proc/self/exe").string();
     std::vector<std::string> args {which("kwin_wayland_wrapper"), "--virtual", "--width", width, "--height", height, "--output-count", "1", "--xwayland", "--no-lockscreen", "--exit-with-session", self};
