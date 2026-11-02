@@ -959,6 +959,17 @@ namespace VDISPLAY {
     virtual_display_layout_e layout = virtual_display_layout_e::extend
   );
 
+  /**
+   * @brief Read every output from a `kscreen-doctor -j` reply.
+   *
+   * An output without "enabled" counts as enabled: since Plasma 6.8 the key is
+   * only present when KWin can disable the output. A reply that cannot be read
+   * is std::nullopt, never an empty desktop.
+   *
+   * Exposed so the reply can be interpreted without a running KDE session.
+   */
+  monitor_restore::snapshot_t kscreenOutputs(const std::string &json_text);
+
   /** @brief What `kscreen-doctor -j` says about a mode on one output. */
   enum class kscreen_mode_state_e {
     unknown_output,  ///< KWin does not report that output at all.

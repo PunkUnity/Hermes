@@ -2682,6 +2682,42 @@ namespace VDISPLAY {
     return true;
   }
 
+  monitor_restore::snapshot_t kscreenOutputs(const std::string &json_text) {
+    std::vector<kscreen_output_t> result;
+    try {
+      const auto data = nlohmann::json::parse(json_text);
+      if (!data.is_object() || !data.contains("outputs") || !data["outputs"].is_array()) {
+        return std::nullopt;
+      }
+      for (const auto &entry : data["outputs"]) {
+        if (!entry.is_object() || !entry.contains("name") || !entry["name"].is_string() ||
+            !entry.contains("connected") || !entry["connected"].is_boolean() ||
+            (entry.contains("enabled") && !entry["enabled"].is_boolean())) {
+          return std::nullopt;
+        }
+        kscreen_output_t output {
+          .name = entry.value("name", std::string {}),
+          .connected = entry.value("connected", false),
+          // Since Plasma 6.8, libkscreen leaves "enabled" out for an output
+          // KWin cannot disable, and reads such an output as enabled itself.
+          .enabled = entry.value("enabled", true),
+          .priority = entry.value("priority", 0),
+          .x = entry.value("pos", nlohmann::json::object()).value("x", 0),
+          .y = entry.value("pos", nlohmann::json::object()).value("y", 0),
+          .width = entry.value("size", nlohmann::json::object()).value("width", 0),
+          .height = entry.value("size", nlohmann::json::object()).value("height", 0),
+        };
+        if (safe_output_name(output.name)) {
+          result.emplace_back(std::move(output));
+        }
+      }
+    } catch (const std::exception &error) {
+      BOOST_LOG(warning) << "[VDISPLAY/KScreen] Could not parse output layout: " << error.what();
+      return std::nullopt;
+    }
+    return result;
+  }
+
   kscreen_mode_state_e kscreenModeState(
     const std::string &json_text,
     const std::string &output,
@@ -2796,7 +2832,6 @@ namespace VDISPLAY {
     }
 
     static monitor_restore::snapshot_t output_snapshot() {
-      std::vector<output_t> result;
       if (!available()) {
         return std::nullopt;
       }
@@ -2805,37 +2840,7 @@ namespace VDISPLAY {
       if (json_text.empty()) {
         return std::nullopt;
       }
-
-      try {
-        const auto data = nlohmann::json::parse(json_text);
-        if (!data.is_object() || !data.contains("outputs") || !data["outputs"].is_array()) {
-          return std::nullopt;
-        }
-        for (const auto &entry : data["outputs"]) {
-          if (!entry.is_object() || !entry.contains("name") || !entry["name"].is_string() ||
-              !entry.contains("connected") || !entry["connected"].is_boolean() ||
-              !entry.contains("enabled") || !entry["enabled"].is_boolean()) {
-            return std::nullopt;
-          }
-          output_t output {
-            .name = entry.value("name", std::string {}),
-            .connected = entry.value("connected", false),
-            .enabled = entry.value("enabled", false),
-            .priority = entry.value("priority", 0),
-            .x = entry.value("pos", nlohmann::json::object()).value("x", 0),
-            .y = entry.value("pos", nlohmann::json::object()).value("y", 0),
-            .width = entry.value("size", nlohmann::json::object()).value("width", 0),
-            .height = entry.value("size", nlohmann::json::object()).value("height", 0),
-          };
-          if (safe_output_name(output.name)) {
-            result.emplace_back(std::move(output));
-          }
-        }
-      } catch (const std::exception &error) {
-        BOOST_LOG(warning) << "[VDISPLAY/KScreen] Could not parse output layout: " << error.what();
-        return std::nullopt;
-      }
-      return result;
+      return kscreenOutputs(json_text);
     }
 
     static std::vector<output_t> outputs() {
