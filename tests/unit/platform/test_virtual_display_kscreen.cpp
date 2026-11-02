@@ -452,6 +452,46 @@ TEST(KScreenModeState, TreatsAnUnreadableReplyAsNoAnswer) {
   );
 }
 
+TEST(KScreenOutputs, ReadsAnOutputWithoutEnabledAsEnabled) {
+  // Plasma 6.8 leaves "enabled" out for an output KWin cannot disable. The
+  // whole reply used to be rejected, so a Hermes-KMS output KWin had already
+  // enabled was never found and every virtual-display session failed.
+  const auto outputs = VDISPLAY::kscreenOutputs(R"({"outputs":[
+    {"name":"DP-2","connected":true,"enabled":true,"priority":1,"pos":{"x":0,"y":0},"size":{"width":2560,"height":1440}},
+    {"name":"Virtual-2","connected":true,"priority":3},
+    {"name":"Virtual-1","connected":true,"enabled":true,"priority":2,"pos":{"x":2560,"y":0},"size":{"width":1280,"height":720}}
+  ]})");
+  ASSERT_TRUE(outputs);
+  ASSERT_EQ(outputs->size(), 3u);
+  EXPECT_EQ((*outputs)[0].name, "DP-2");
+  EXPECT_EQ((*outputs)[0].width, 2560);
+  EXPECT_EQ((*outputs)[1].name, "Virtual-2");
+  EXPECT_TRUE((*outputs)[1].enabled);
+  EXPECT_EQ((*outputs)[2].name, "Virtual-1");
+  EXPECT_TRUE((*outputs)[2].connected);
+  EXPECT_TRUE((*outputs)[2].enabled);
+  EXPECT_EQ((*outputs)[2].x, 2560);
+}
+
+TEST(KScreenOutputs, KeepsADisabledOutputDisabled) {
+  const auto outputs = VDISPLAY::kscreenOutputs(R"({"outputs":[
+    {"name":"HDMI-A-3","connected":true,"enabled":false,"priority":0}
+  ]})");
+  ASSERT_TRUE(outputs);
+  ASSERT_EQ(outputs->size(), 1u);
+  EXPECT_FALSE((*outputs)[0].enabled);
+}
+
+TEST(KScreenOutputs, RejectsAReplyItCannotRead) {
+  // A missing snapshot stops the caller; an empty one would read as a desktop
+  // with no monitors.
+  EXPECT_FALSE(VDISPLAY::kscreenOutputs(""));
+  EXPECT_FALSE(VDISPLAY::kscreenOutputs("kscreen-doctor: could not connect"));
+  EXPECT_FALSE(VDISPLAY::kscreenOutputs("{}"));
+  EXPECT_FALSE(VDISPLAY::kscreenOutputs(R"({"outputs":[{"name":"DP-2","enabled":true}]})"));
+  EXPECT_FALSE(VDISPLAY::kscreenOutputs(R"({"outputs":[{"name":"DP-2","connected":true,"enabled":"yes"}]})"));
+}
+
 TEST(KScreenHdr, ReadsOnlyTheRequestedConnectedOutput) {
   const auto state = VDISPLAY::kscreenHdrState(R"({"outputs":[
     {"name":"DP-1","connected":true,"enabled":true,"hdr":true,"wcg":true},
