@@ -23,7 +23,15 @@ follow() {
 }
 
 wake_modeset() { kdoctor --dpms on; }
-wake_ddcutil() { ddcutil --disable-flock --bus "$bus" getvcp D6 >/dev/null 2>&1; }
+# Record exactly which system calls ddcutil makes, so a working wake can be reproduced byte for byte.
+wake_ddcutil() {
+  if command -v strace >/dev/null 2>&1; then
+    strace -f -tt -e trace=openat,ioctl,read,write,pread64,pwrite64 -o "/home/$user/wake-lab-ddcutil.$(date +%H%M%S).strace" \
+      ddcutil --disable-flock --bus "$bus" getvcp D6 >/dev/null 2>&1
+  else
+    ddcutil --disable-flock --bus "$bus" getvcp D6 >/dev/null 2>&1
+  fi
+}
 wake_aux_read() { dd if="$aux" bs=1 count=1 status=none >/dev/null 2>&1; }
 wake_aux_power() { printf "\x01" | dd of="$aux" bs=1 seek=1536 conv=notrunc status=none 2>/dev/null; }
 wake_edid_read() { dd if="$conn/edid" bs=1 count=1 status=none >/dev/null 2>&1; i2ctransfer -y "$bus" w1@0x50 0x00 r1 >/dev/null 2>&1; }
