@@ -1709,6 +1709,7 @@ namespace platf {
 
       capture_e capture(const push_captured_image_cb_t &push_captured_image_cb, const pull_free_image_cb_t &pull_free_image_cb, bool *cursor) override {
         auto next_frame = std::chrono::steady_clock::now();
+        const VDISPLAY::KeepScreensOn keep_screens_on;
 
         sleep_overshoot_logger.reset();
 
@@ -2028,6 +2029,7 @@ namespace platf {
 
       capture_e capture(const push_captured_image_cb_t &push_captured_image_cb, const pull_free_image_cb_t &pull_free_image_cb, bool *cursor) {
         auto next_frame = std::chrono::steady_clock::now();
+        const VDISPLAY::KeepScreensOn keep_screens_on;
 
         sleep_overshoot_logger.reset();
 
