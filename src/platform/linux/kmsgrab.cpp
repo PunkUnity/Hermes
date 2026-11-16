@@ -882,8 +882,15 @@ namespace platf {
         return -1;
       }
 
+      /**
+       * The connector's state as the kernel last saw it. drmModeGetConnector()
+       * would probe the connector instead: on amdgpu that retrains a
+       * DisplayPort link, which can knock a monitor that is just waking off
+       * the link and back (kernel bug 210429). The compositor probes on
+       * hotplug, so the cached state is current enough to capture from.
+       */
       connector_interal_t connector(std::uint32_t id) {
-        return drmModeGetConnector(fd.el, id);
+        return drmModeGetConnectorCurrent(fd.el, id);
       }
 
       std::vector<connector_t> monitors(conn_type_count_t &conn_type_count) {
@@ -896,6 +903,9 @@ namespace platf {
         std::vector<connector_t> monitors;
         std::for_each_n(resources->connectors, resources->count_connectors, [this, &conn_type_count, &monitors](std::uint32_t id) {
           auto conn = connector(id);
+          if (!conn) {
+            return;
+          }
 
           std::uint32_t crtc_id = 0;
 

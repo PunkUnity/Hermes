@@ -73,6 +73,12 @@ run `scripts/bump-version.sh <major|minor|patch>` — it moves everything under
   the lookup always came back empty. Activating the output and exclusive mode
   then stopped with "DRM connector was not found". The driver is now read from
   the card's own device.
+- Listing displays for KMS capture no longer probes every connector (from
+  PunkUnity). `drmModeGetConnector()` asks the driver to re-detect the
+  monitor; on amdgpu that retrains a DisplayPort link, and a monitor that had
+  just woken could drop off and reconnect while a stream was starting. Hermes
+  now reads the state the kernel already has, which the compositor keeps
+  current on hotplug.
 
 [#95]: https://github.com/MrOz59/Hermes/pull/95
 [#99]: https://github.com/MrOz59/Hermes/pull/99
