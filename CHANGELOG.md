@@ -95,6 +95,12 @@ run `scripts/bump-version.sh <major|minor|patch>` — it moves everything under
   picture, waiting at most 3 seconds. Outputs turned off in the display
   settings are left alone, so a host without a monitor still gets a virtual
   display.
+- A stream no longer jumps to another screen when its monitor drops off for a
+  moment (from PunkUnity). A DisplayPort monitor coming out of deep sleep can
+  fail its first link training and reconnect a few seconds later; Hermes fell
+  back to the first display at once. It now gives a display that vanished
+  mid-stream up to 10 seconds to return before falling back. Displays that
+  stay connected are not affected.
 
 [#95]: https://github.com/MrOz59/Hermes/pull/95
 [#99]: https://github.com/MrOz59/Hermes/pull/99
