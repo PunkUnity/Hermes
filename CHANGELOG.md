@@ -95,6 +95,12 @@ run `scripts/bump-version.sh <major|minor|patch>` — it moves everything under
   picture, waiting at most 3 seconds. Outputs turned off in the display
   settings are left alone, so a host without a monitor still gets a virtual
   display.
+- The screens stay on while Hermes captures them on Linux (from PunkUnity),
+  as they already did on Windows. With no input from the host's own keyboard
+  or mouse, the desktop's idle timer turned the monitor off mid-stream, which
+  stopped the capture and on KWin could lock the session. KMS capture now
+  holds an `org.freedesktop.ScreenSaver` inhibition for as long as it runs;
+  the desktop releases it by itself if Hermes exits.
 
 [#95]: https://github.com/MrOz59/Hermes/pull/95
 [#99]: https://github.com/MrOz59/Hermes/pull/99

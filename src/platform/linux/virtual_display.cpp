@@ -80,6 +80,110 @@ namespace VDISPLAY {
     return "unix:path=/run/user/" + std::to_string(uid) + "/bus";
   }
 
+<<<<<<< HEAD
+=======
+#ifdef SUNSHINE_BUILD_SDBUS
+  /**
+   * Open the desktop's user bus even when Hermes carries a file capability.
+   *
+   * libsystemd deliberately reads DBUS_SESSION_BUS_ADDRESS and XDG_RUNTIME_DIR
+   * with secure_getenv(). Linux sets AT_SECURE for a file-capability binary, so
+   * sd_bus_open_user() then sees neither variable and returns ENOMEDIUM. The
+   * packaged binary carries cap_sys_admin+p for legacy KMS capture, which made
+   * every sd-bus feature fail even though its child tools could reach the bus.
+   *
+   * Try libsystemd's normal discovery first for non-systemd/custom sessions.
+   * Its standard user-bus fallback is deterministic, so reproduce that path
+   * explicitly when discovery is unavailable. The address contains only the
+   * kernel-provided real uid; no environment value crosses the capability
+   * boundary.
+   */
+  static int open_user_bus(sd_bus **result) {
+    if (!result) {
+      return -EINVAL;
+    }
+    *result = nullptr;
+
+    const int discovered = sd_bus_open_user(result);
+    if (discovered >= 0) {
+      return discovered;
+    }
+    if (*result) {
+      sd_bus_unref(*result);
+      *result = nullptr;
+    }
+    if (discovered != -ENOMEDIUM) {
+      return discovered;
+    }
+
+    sd_bus *bus = nullptr;
+    int status = sd_bus_new(&bus);
+    if (status < 0) {
+      return status;
+    }
+    const auto fail = [&bus](int error) {
+      sd_bus_unref(bus);
+      return error;
+    };
+
+    const auto address = systemdUserBusAddress(static_cast<uint32_t>(::getuid()));
+    status = sd_bus_set_address(bus, address.c_str());
+    if (status < 0) {
+      return fail(status);
+    }
+    status = sd_bus_set_bus_client(bus, 1);
+    if (status < 0) {
+      return fail(status);
+    }
+    status = sd_bus_start(bus);
+    if (status < 0) {
+      return fail(status);
+    }
+
+    *result = bus;
+    return 0;
+  }
+#endif
+
+#ifdef SUNSHINE_BUILD_SDBUS
+  namespace {
+    constexpr const char *screen_saver_service = "org.freedesktop.ScreenSaver";
+    constexpr const char *screen_saver_path = "/org/freedesktop/ScreenSaver";
+  }  // namespace
+
+  KeepScreensOn::KeepScreensOn() {
+    if (open_user_bus(&bus) < 0) {
+      bus = nullptr;
+      return;
+    }
+    sd_bus_error error = SD_BUS_ERROR_NULL;
+    sd_bus_message *reply = nullptr;
+    int status = sd_bus_call_method(bus, screen_saver_service, screen_saver_path, screen_saver_service, "Inhibit", &error, &reply, "ss", "Hermes", "Streaming this screen");
+    if (status >= 0) {
+      status = sd_bus_message_read(reply, "u", &cookie);
+    }
+    if (status < 0) {
+      BOOST_LOG(debug) << "[VDISPLAY] Can't keep the screens on during capture: "
+                       << (error.message ? error.message : "no answer from org.freedesktop.ScreenSaver");
+      bus = sd_bus_flush_close_unref(bus);
+    }
+    sd_bus_message_unref(reply);
+    sd_bus_error_free(&error);
+  }
+
+  KeepScreensOn::~KeepScreensOn() {
+    if (!bus) {
+      return;
+    }
+    sd_bus_call_method(bus, screen_saver_service, screen_saver_path, screen_saver_service, "UnInhibit", nullptr, nullptr, "u", cookie);
+    sd_bus_flush_close_unref(bus);
+  }
+#else
+  KeepScreensOn::KeepScreensOn() = default;
+  KeepScreensOn::~KeepScreensOn() = default;
+#endif
+
+>>>>>>> feat/keep-screens-on-while-streaming
   /** Whether something accepts connections on a Unix socket. */
   static bool unix_socket_answers(const std::string &path, bool abstract_namespace = false) {
     sockaddr_un address {};
