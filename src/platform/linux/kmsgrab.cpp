@@ -3285,7 +3285,10 @@ namespace platf {
     // so a configured display number still selects the same monitor.
     if (const auto primary = VDISPLAY::primaryPhysicalOutputName(); !primary.empty()) {
       const auto it = index_by_connector.find(primary);
-      if (it != index_by_connector.end()) {
+      if (it == index_by_connector.end()) {
+        BOOST_LOG(warning) << "The desktop's primary output "sv << primary
+                           << " has no active plane (switched off or asleep); it can't be the default display."sv;
+      } else {
         const auto pos = std::find(display_names.begin(), display_names.end(), std::to_string(it->second));
         if (pos != display_names.end() && pos != display_names.begin()) {
           std::rotate(display_names.begin(), pos, pos + 1);
