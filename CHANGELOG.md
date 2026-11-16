@@ -101,6 +101,12 @@ run `scripts/bump-version.sh <major|minor|patch>` — it moves everything under
   stopped the capture and on KWin could lock the session. KMS capture now
   holds an `org.freedesktop.ScreenSaver` inhibition for as long as it runs;
   the desktop releases it by itself if Hermes exits.
+- A stream no longer jumps to another screen when its monitor drops off for a
+  moment (from PunkUnity). A DisplayPort monitor coming out of deep sleep can
+  fail its first link training and reconnect a few seconds later; Hermes fell
+  back to the first display at once. It now gives a display that vanished
+  mid-stream up to 10 seconds to return before falling back. Displays that
+  stay connected are not affected.
 
 [#95]: https://github.com/MrOz59/Hermes/pull/95
 [#99]: https://github.com/MrOz59/Hermes/pull/99
