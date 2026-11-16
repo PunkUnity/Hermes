@@ -7979,6 +7979,21 @@ namespace VDISPLAY {
     }
   }
 
+  std::string primaryPhysicalOutputName() {
+    if (window_system != window_system_e::WAYLAND || !kscreen::available()) {
+      return {};
+    }
+    for (const auto &output : kscreen::outputs()) {
+      if (output.connected && output.enabled && output.priority == 1) {
+        if (output.name.rfind("Virtual", 0) == 0 || output.name.rfind("HERMES", 0) == 0) {
+          return {};
+        }
+        return output.name;
+      }
+    }
+    return {};
+  }
+
   bool activateVirtualDisplayOutput(const std::string &displayName) {
     // KWin is configured when the display is created - enabled, placed and
     // driven at the requested mode in one kscreen-doctor transaction - so
