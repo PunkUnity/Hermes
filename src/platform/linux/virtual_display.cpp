@@ -143,6 +143,44 @@ namespace VDISPLAY {
   }
 #endif
 
+#ifdef SUNSHINE_BUILD_SDBUS
+  namespace {
+    constexpr const char *screen_saver_service = "org.freedesktop.ScreenSaver";
+    constexpr const char *screen_saver_path = "/org/freedesktop/ScreenSaver";
+  }  // namespace
+
+  KeepScreensOn::KeepScreensOn() {
+    if (open_user_bus(&bus) < 0) {
+      bus = nullptr;
+      return;
+    }
+    sd_bus_error error = SD_BUS_ERROR_NULL;
+    sd_bus_message *reply = nullptr;
+    int status = sd_bus_call_method(bus, screen_saver_service, screen_saver_path, screen_saver_service, "Inhibit", &error, &reply, "ss", "Hermes", "Streaming this screen");
+    if (status >= 0) {
+      status = sd_bus_message_read(reply, "u", &cookie);
+    }
+    if (status < 0) {
+      BOOST_LOG(debug) << "[VDISPLAY] Can't keep the screens on during capture: "
+                       << (error.message ? error.message : "no answer from org.freedesktop.ScreenSaver");
+      bus = sd_bus_flush_close_unref(bus);
+    }
+    sd_bus_message_unref(reply);
+    sd_bus_error_free(&error);
+  }
+
+  KeepScreensOn::~KeepScreensOn() {
+    if (!bus) {
+      return;
+    }
+    sd_bus_call_method(bus, screen_saver_service, screen_saver_path, screen_saver_service, "UnInhibit", nullptr, nullptr, "u", cookie);
+    sd_bus_flush_close_unref(bus);
+  }
+#else
+  KeepScreensOn::KeepScreensOn() = default;
+  KeepScreensOn::~KeepScreensOn() = default;
+#endif
+
   /** Whether something accepts connections on a Unix socket. */
   static bool unix_socket_answers(const std::string &path, bool abstract_namespace = false) {
     sockaddr_un address {};
