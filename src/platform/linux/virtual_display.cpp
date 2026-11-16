@@ -7929,6 +7929,109 @@ namespace VDISPLAY {
     }
   }
 
+  namespace {
+    /**
+     * Whether connector @p name ("DP-2") on the DRM device behind @p fd is
+     * scanning out: bound to a CRTC that has a mode and a framebuffer.
+     */
+    bool connector_scanning_out(int fd, const std::string &name) {
+      drmModeRes *res = drmModeGetResources(fd);
+      if (!res) {
+        return false;
+      }
+      bool scanning_out = false;
+      for (int i = 0; i < res->count_connectors && !scanning_out; ++i) {
+        drmModeConnector *conn = drmModeGetConnectorCurrent(fd, res->connectors[i]);
+        if (!conn) {
+          continue;
+        }
+        const char *type = drmModeGetConnectorTypeName(conn->connector_type);
+        const bool match = type && name == std::string {type} + '-' + std::to_string(conn->connector_type_id);
+        drmModeEncoder *enc = match && conn->encoder_id ? drmModeGetEncoder(fd, conn->encoder_id) : nullptr;
+        drmModeCrtc *crtc = enc && enc->crtc_id ? drmModeGetCrtc(fd, enc->crtc_id) : nullptr;
+        scanning_out = crtc && crtc->mode_valid && crtc->buffer_id;
+        drmModeFreeCrtc(crtc);
+        drmModeFreeEncoder(enc);
+        drmModeFreeConnector(conn);
+      }
+      drmModeFreeResources(res);
+      return scanning_out;
+    }
+
+    /** Tell the desktop's screen saver that the user is active. */
+    void simulate_user_activity() {
+#ifdef SUNSHINE_BUILD_SDBUS
+      sd_bus *bus = nullptr;
+      if (open_user_bus(&bus) < 0) {
+        return;
+      }
+      sd_bus_call_method(bus, "org.freedesktop.ScreenSaver", "/org/freedesktop/ScreenSaver", "org.freedesktop.ScreenSaver", "SimulateUserActivity", nullptr, nullptr, "");
+      sd_bus_flush_close_unref(bus);
+#endif
+    }
+
+    /** Whether any DRM card scans out connector @p name. */
+    bool output_scanning_out(const std::string &name) {
+      std::error_code ec;
+      for (const auto &entry : std::filesystem::directory_iterator {"/dev/dri", ec}) {
+        if (!entry.path().filename().string().starts_with("card")) {
+          continue;
+        }
+        const int fd = ::open(entry.path().c_str(), O_RDONLY | O_CLOEXEC);
+        if (fd < 0) {
+          continue;
+        }
+        const bool scanning_out = connector_scanning_out(fd, name);
+        ::close(fd);
+        if (scanning_out) {
+          return true;
+        }
+      }
+      return false;
+    }
+  }  // namespace
+
+  bool wakeSleepingMonitor() {
+    if (window_system != window_system_e::WAYLAND || !kscreen::available()) {
+      return false;
+    }
+
+    // The primary output, or failing that any physical output the desktop
+    // still has enabled. If there is none, the screens are off by choice.
+    std::string monitor;
+    for (const auto &output : kscreen::outputs()) {
+      if (!output.connected || !output.enabled || output.name.starts_with("Virtual")) {
+        continue;
+      }
+      if (monitor.empty() || output.priority == 1) {
+        monitor = output.name;
+      }
+    }
+    if (monitor.empty()) {
+      return false;
+    }
+
+    BOOST_LOG(info) << "[VDISPLAY/KScreen] " << monitor
+                    << " is enabled but dark (power saving); waking it instead of creating a virtual display.";
+    // Count as user activity first, so the idle timer that put the screens to
+    // sleep doesn't turn them off again before capture starts.
+    simulate_user_activity();
+    if (!kscreen::run_layout_command("kscreen-doctor --dpms on")) {
+      return false;
+    }
+
+    // The screens come back one at a time, and each reads as enabled before
+    // the compositor has drawn on it. Capture can only open it once it does.
+    for (int i = 0; i < 30; ++i) {
+      std::this_thread::sleep_for(100ms);
+      if (output_scanning_out(monitor)) {
+        return true;
+      }
+    }
+    BOOST_LOG(warning) << "[VDISPLAY/KScreen] " << monitor << " did not show a frame within 3 seconds.";
+    return false;
+  }
+
   bool activateVirtualDisplayOutput(const std::string &displayName) {
     // KWin is configured when the display is created - enabled, placed and
     // driven at the requested mode in one kscreen-doctor transaction - so
