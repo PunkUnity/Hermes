@@ -1020,6 +1020,14 @@ namespace VDISPLAY {
   bool activateVirtualDisplayOutput(const std::string &displayName);
 
   /**
+   * @brief The desktop's primary physical output ("DP-2"), or empty.
+   * @details KWin on Wayland only: the connected, enabled output KScreen gives
+   * priority 1, unless it is a virtual output. Empty when there is no such
+   * output or it can't be determined.
+   */
+  std::string primaryPhysicalOutputName();
+
+  /**
    * Touch and pen binding for sessions that stream an existing monitor rather
    * than a virtual display. begin/end bracket the session; the KMS capture
    * reports the connector it streams (e.g. "DP-2"), and on KWin the touch and
@@ -1028,14 +1036,6 @@ namespace VDISPLAY {
   void beginPhysicalOutputSession();
   void endPhysicalOutputSession();
   void notePhysicalCaptureOutput(const std::string &connector_name);
-
-  /**
-   * @brief The desktop's primary physical output ("DP-2"), or empty.
-   * @details KWin on Wayland only: the connected, enabled output KScreen gives
-   * priority 1, unless it is a virtual output. Empty when there is no such
-   * output or it can't be determined.
-   */
-  std::string primaryPhysicalOutputName();
 
   /**
    * Put windows of these classes on the session's virtual output, now and as
