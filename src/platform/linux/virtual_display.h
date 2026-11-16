@@ -25,6 +25,8 @@
 #include "hermes_kms_color.h"
 #include "monitor_restore.h"
 
+struct sd_bus;
+
 namespace VDISPLAY {
 
   /**
@@ -1283,6 +1285,27 @@ namespace VDISPLAY {
   /** Acquire current cursor metadata and, when requested, its DMA-BUF. */
   bool hermesKmsAcquireCursor(int render_fd, bool request_buffer,
                               HermesKmsCursor &out);
+
+  /**
+   * @brief Keeps the screens on for as long as it lives.
+   * @details The Linux side of what capture on Windows does with
+   * ES_DISPLAY_REQUIRED: a monitor that sleeps mid-stream stops the capture,
+   * and on KWin can lock the session. Holds an org.freedesktop.ScreenSaver
+   * inhibition on the user's session bus, which the desktop drops by itself
+   * if Hermes exits without releasing it. Does nothing without sd-bus or on
+   * a desktop that does not offer the interface.
+   */
+  class KeepScreensOn {
+  public:
+    KeepScreensOn();
+    ~KeepScreensOn();
+    KeepScreensOn(const KeepScreensOn &) = delete;
+    KeepScreensOn &operator=(const KeepScreensOn &) = delete;
+
+  private:
+    sd_bus *bus = nullptr;
+    std::uint32_t cookie = 0;
+  };
 
 }  // namespace VDISPLAY
 
