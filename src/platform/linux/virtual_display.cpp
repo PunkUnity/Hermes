@@ -7992,6 +7992,94 @@ namespace VDISPLAY {
     }
   }
 
+  namespace {
+    /**
+     * Whether connector @p name ("DP-2") on the DRM device behind @p fd is
+     * scanning out: bound to a CRTC that has a mode and a framebuffer.
+     */
+    bool connector_scanning_out(int fd, const std::string &name) {
+      drmModeRes *res = drmModeGetResources(fd);
+      if (!res) {
+        return false;
+      }
+      bool scanning_out = false;
+      for (int i = 0; i < res->count_connectors && !scanning_out; ++i) {
+        drmModeConnector *conn = drmModeGetConnector(fd, res->connectors[i]);
+        if (!conn) {
+          continue;
+        }
+        const char *type = drmModeGetConnectorTypeName(conn->connector_type);
+        const bool match = type && name == std::string {type} + '-' + std::to_string(conn->connector_type_id);
+        drmModeEncoder *enc = match && conn->encoder_id ? drmModeGetEncoder(fd, conn->encoder_id) : nullptr;
+        drmModeCrtc *crtc = enc && enc->crtc_id ? drmModeGetCrtc(fd, enc->crtc_id) : nullptr;
+        scanning_out = crtc && crtc->mode_valid && crtc->buffer_id;
+        drmModeFreeCrtc(crtc);
+        drmModeFreeEncoder(enc);
+        drmModeFreeConnector(conn);
+      }
+      drmModeFreeResources(res);
+      return scanning_out;
+    }
+
+    /** Whether any DRM card scans out connector @p name. */
+    bool output_scanning_out(const std::string &name) {
+      std::error_code ec;
+      for (const auto &entry : std::filesystem::directory_iterator {"/dev/dri", ec}) {
+        if (!entry.path().filename().string().starts_with("card")) {
+          continue;
+        }
+        const int fd = ::open(entry.path().c_str(), O_RDONLY | O_CLOEXEC);
+        if (fd < 0) {
+          continue;
+        }
+        const bool scanning_out = connector_scanning_out(fd, name);
+        ::close(fd);
+        if (scanning_out) {
+          return true;
+        }
+      }
+      return false;
+    }
+  }  // namespace
+
+  bool wakeSleepingMonitor() {
+    if (window_system != window_system_e::WAYLAND || !kscreen::available()) {
+      return false;
+    }
+
+    // The primary output, or failing that any physical output the desktop
+    // still has enabled. If there is none, the screens are off by choice.
+    std::string monitor;
+    for (const auto &output : kscreen::outputs()) {
+      if (!output.connected || !output.enabled || output.name.starts_with("Virtual")) {
+        continue;
+      }
+      if (monitor.empty() || output.priority == 1) {
+        monitor = output.name;
+      }
+    }
+    if (monitor.empty()) {
+      return false;
+    }
+
+    BOOST_LOG(info) << "[VDISPLAY/KScreen] " << monitor
+                    << " is enabled but dark (power saving); waking it instead of creating a virtual display.";
+    if (!kscreen::run_layout_command("kscreen-doctor --dpms on")) {
+      return false;
+    }
+
+    // Outputs come back one at a time, and each reads as enabled before the
+    // compositor has drawn on it. Capture can only open it once it scans out.
+    for (int i = 0; i < 50; ++i) {
+      std::this_thread::sleep_for(100ms);
+      if (output_scanning_out(monitor)) {
+        return true;
+      }
+    }
+    BOOST_LOG(warning) << "[VDISPLAY/KScreen] " << monitor << " did not show a frame within 5 seconds.";
+    return false;
+  }
+
   bool activateVirtualDisplayOutput(const std::string &displayName) {
     // KWin is configured when the display is created - enabled, placed and
     // driven at the requested mode in one kscreen-doctor transaction - so

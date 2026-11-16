@@ -83,10 +83,18 @@ run `scripts/bump-version.sh <major|minor|patch>` — it moves everything under
   layout, so monitor 0 could be a KVM capture input or a dummy plug. On KWin,
   the output KScreen marks as primary is now listed first; a configured
   display number still selects the same monitor as before.
+- Starting a stream while the screens are asleep no longer opens an empty
+  virtual display beside the desktop ([#133], from PunkUnity). KWin's power
+  saving leaves every connector disabled, so Hermes found no lit monitor and
+  created one. When KScreen still lists a connected, enabled output, Hermes now
+  wakes the screens, waits up to 5 seconds for the primary output to show a
+  frame, and streams it. Outputs turned off in the display settings are left
+  alone, so a host without a monitor still gets a virtual display.
 
 [#95]: https://github.com/MrOz59/Hermes/pull/95
 [#99]: https://github.com/MrOz59/Hermes/pull/99
 [#131]: https://github.com/MrOz59/Hermes/pull/131
+[#133]: https://github.com/MrOz59/Hermes/pull/133
 
 ## [0.7.0] - 2026-11-02
 
