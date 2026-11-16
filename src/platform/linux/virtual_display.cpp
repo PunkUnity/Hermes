@@ -7985,10 +7985,8 @@ namespace VDISPLAY {
     }
     for (const auto &output : kscreen::outputs()) {
       if (output.connected && output.enabled && output.priority == 1) {
-        if (output.name.rfind("Virtual", 0) == 0 || output.name.rfind("HERMES", 0) == 0) {
-          return {};
-        }
-        return output.name;
+        // A virtual output made primary is not a monitor to prefer.
+        return output.name.starts_with("Virtual") ? std::string {} : output.name;
       }
     }
     return {};

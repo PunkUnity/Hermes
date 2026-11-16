@@ -3176,7 +3176,16 @@ namespace platf {
         }
       }
 
-      auto crtc_to_monitor = kms::map_crtc_to_monitor(card.monitors(conn_type_count));
+      const auto monitors = card.monitors(conn_type_count);
+      auto crtc_to_monitor = kms::map_crtc_to_monitor(monitors);
+
+      // Kernel connector names ("DP-2") by CRTC, to find the desktop's primary output.
+      std::map<std::uint32_t, std::string> connector_by_crtc;
+      for (const auto &monitor : monitors) {
+        if (auto conn = card.connector(monitor.connector_id)) {
+          connector_by_crtc.emplace(monitor.crtc_id, kms::kernel_connector_name(conn->connector_type, conn->connector_type_id));
+        }
+      }
 
       auto end = std::end(card);
       for (auto plane = std::begin(card); plane != end; ++plane) {
@@ -3222,23 +3231,8 @@ namespace platf {
           it->second.monitor_index = count;
         }
 
-        // Record the kernel connector name ("DP-2") of this monitor, so the
-        // desktop's primary output can be preferred below. A scratch counter
-        // keeps the shared per-type connector count untouched.
-        {
-          kms::conn_type_count_t scratch;
-          for (auto &connector : card.monitors(scratch)) {
-            if (connector.crtc_id != plane->crtc_id) {
-              continue;
-            }
-            if (auto conn = card.connector(connector.connector_id)) {
-              auto name = kms::kernel_connector_name(conn->connector_type, conn->connector_type_id);
-              if (!name.empty()) {
-                index_by_connector.emplace(std::move(name), count);
-              }
-            }
-            break;
-          }
+        if (const auto name = connector_by_crtc.find(plane->crtc_id); name != connector_by_crtc.end() && !name->second.empty()) {
+          index_by_connector.emplace(name->second, count);
         }
 
         kms::env_width = std::max(kms::env_width, (int) (crtc->x + crtc->width));
@@ -3286,8 +3280,8 @@ namespace platf {
     if (const auto primary = VDISPLAY::primaryPhysicalOutputName(); !primary.empty()) {
       const auto it = index_by_connector.find(primary);
       if (it == index_by_connector.end()) {
-        BOOST_LOG(warning) << "The desktop's primary output "sv << primary
-                           << " has no active plane (switched off or asleep); it can't be the default display."sv;
+        BOOST_LOG(info) << "The desktop's primary output "sv << primary
+                        << " is dark (switched off or asleep), so it can't be the default display yet."sv;
       } else {
         const auto pos = std::find(display_names.begin(), display_names.end(), std::to_string(it->second));
         if (pos != display_names.end() && pos != display_names.begin()) {
