@@ -1038,6 +1038,20 @@ namespace VDISPLAY {
   std::string primaryPhysicalOutputName();
 
   /**
+   * @brief Wake physical monitors the compositor has only put to sleep.
+   * @details KWin on Wayland only. A monitor in power saving reads as dark to
+   * the kernel, so it looks the same as no monitor at all. When KScreen still
+   * lists a connected, enabled physical output, ask KWin to turn the screens
+   * back on and return the output to wait for: the primary one (KScreen
+   * priority 1) if it is physical, else the first enabled physical output.
+   * Otherwise do nothing and return an empty string.
+   */
+  std::string wakeSleepingPhysicalOutputs();
+
+  /** Whether the kernel reports connector @p name (e.g. "DP-2") as enabled. */
+  bool physicalConnectorLit(const std::string &name);
+
+  /**
    * Put windows of these classes on the session's virtual output, now and as
    * they appear, until the display is removed. KWin only; elsewhere nothing
    * happens. For an application that reuses a window already open on a

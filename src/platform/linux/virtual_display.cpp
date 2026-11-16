@@ -7994,6 +7994,51 @@ namespace VDISPLAY {
     return {};
   }
 
+  std::string wakeSleepingPhysicalOutputs() {
+    if (window_system != window_system_e::WAYLAND || !kscreen::available()) {
+      return {};
+    }
+    std::string target;
+    for (const auto &output : kscreen::outputs()) {
+      if (!output.connected || !output.enabled || output.name.rfind("Virtual", 0) == 0) {
+        continue;
+      }
+      if (target.empty() || output.priority == 1) {
+        target = output.name;
+      }
+    }
+    if (target.empty()) {
+      return {};
+    }
+    BOOST_LOG(info) << "[VDISPLAY/KScreen] " << target
+                    << " is enabled but dark (power saving); waking the screens instead of creating a virtual display.";
+    if (!kscreen::run_layout_command("kscreen-doctor --dpms on")) {
+      return {};
+    }
+    return target;
+  }
+
+  bool physicalConnectorLit(const std::string &name) {
+    if (name.empty()) {
+      return false;
+    }
+    const auto suffix = "-" + name;
+    std::error_code ec;
+    for (const auto &entry : std::filesystem::directory_iterator {"/sys/class/drm", ec}) {
+      const auto file = entry.path().filename().string();
+      if (!file.starts_with("card") || !file.ends_with(suffix)) {
+        continue;
+      }
+      std::ifstream in {entry.path() / "enabled"};
+      std::string value;
+      std::getline(in, value);
+      if (value == "enabled") {
+        return true;
+      }
+    }
+    return false;
+  }
+
   bool activateVirtualDisplayOutput(const std::string &displayName) {
     // KWin is configured when the display is created - enabled, placed and
     // driven at the requested mode in one kscreen-doctor transaction - so
