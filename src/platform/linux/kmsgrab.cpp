@@ -3149,6 +3149,7 @@ namespace platf {
 
     std::vector<kms::card_descriptor_t> cds;
     std::vector<std::string> display_names;
+    std::map<std::string, int> index_by_connector;
 
     fs::path card_dir {"/dev/dri"sv};
     for (auto &entry : fs::directory_iterator {card_dir}) {
@@ -3221,6 +3222,25 @@ namespace platf {
           it->second.monitor_index = count;
         }
 
+        // Record the kernel connector name ("DP-2") of this monitor, so the
+        // desktop's primary output can be preferred below. A scratch counter
+        // keeps the shared per-type connector count untouched.
+        {
+          kms::conn_type_count_t scratch;
+          for (auto &connector : card.monitors(scratch)) {
+            if (connector.crtc_id != plane->crtc_id) {
+              continue;
+            }
+            if (auto conn = card.connector(connector.connector_id)) {
+              auto name = kms::kernel_connector_name(conn->connector_type, conn->connector_type_id);
+              if (!name.empty()) {
+                index_by_connector.emplace(std::move(name), count);
+              }
+            }
+            break;
+          }
+        }
+
         kms::env_width = std::max(kms::env_width, (int) (crtc->x + crtc->width));
         kms::env_height = std::max(kms::env_height, (int) (crtc->y + crtc->height));
 
@@ -3257,6 +3277,26 @@ namespace platf {
     BOOST_LOG(debug) << "Desktop resolution: "sv << kms::env_width << 'x' << kms::env_height;
 
     kms::card_descriptors = std::move(cds);
+
+    // Monitor numbers follow DRM plane order, which has nothing to do with the
+    // desktop layout: monitor 0 can be a capture device or a dummy plug. When
+    // no display is configured, the first name in this list is streamed, so
+    // put the desktop's primary output first. Every number keeps its meaning,
+    // so a configured display number still selects the same monitor.
+    if (const auto primary = VDISPLAY::primaryPhysicalOutputName(); !primary.empty()) {
+      const auto it = index_by_connector.find(primary);
+      if (it == index_by_connector.end()) {
+        BOOST_LOG(warning) << "The desktop's primary output "sv << primary
+                           << " has no active plane (switched off or asleep); it can't be the default display."sv;
+      } else {
+        const auto pos = std::find(display_names.begin(), display_names.end(), std::to_string(it->second));
+        if (pos != display_names.end() && pos != display_names.begin()) {
+          std::rotate(display_names.begin(), pos, pos + 1);
+          BOOST_LOG(info) << "Monitor "sv << it->second << " ("sv << primary
+                          << ") is the desktop's primary output; it is streamed when no display is configured."sv;
+        }
+      }
+    }
 
     // Active Hermes-KMS virtual displays are capturable through their render
     // node even when no physical framebuffer handle is readable (no DRM

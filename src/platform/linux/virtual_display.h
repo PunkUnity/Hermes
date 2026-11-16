@@ -1030,6 +1030,14 @@ namespace VDISPLAY {
   void notePhysicalCaptureOutput(const std::string &connector_name);
 
   /**
+   * @brief The desktop's primary physical output ("DP-2"), or empty.
+   * @details KWin on Wayland only: the connected, enabled output KScreen gives
+   * priority 1, unless it is a virtual output. Empty when there is no such
+   * output or it can't be determined.
+   */
+  std::string primaryPhysicalOutputName();
+
+  /**
    * Put windows of these classes on the session's virtual output, now and as
    * they appear, until the display is removed. KWin only; elsewhere nothing
    * happens. For an application that reuses a window already open on a
