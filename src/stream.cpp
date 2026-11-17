@@ -1619,8 +1619,18 @@ namespace stream {
       }
 
       try {
-        // Use around 80% of 1Gbps          1Gbps            percent    ms     packet      byte
-        size_t ratecontrol_packets_in_1ms = std::giga::num * 80 / 100 / 1000 / blocksize / 8;
+        // TEST BUILD ONLY, not for upstream: HERMES_TEST_PACING_MBPS sets the
+        // send rate. Unset, it is the usual 800 Mbps (around 80% of 1 Gbps).
+        static const std::size_t pacing_mbps = [] {
+          const char *value = std::getenv("HERMES_TEST_PACING_MBPS");
+          const long mbps = value ? std::strtol(value, nullptr, 10) : 0;
+          if (mbps > 0) {
+            BOOST_LOG(info) << "Packet pacing test switch: sending video at "sv << mbps << " Mbps"sv;
+            return static_cast<std::size_t>(mbps);
+          }
+          return std::size_t {800};
+        }();
+        size_t ratecontrol_packets_in_1ms = std::max<std::size_t>(1, pacing_mbps * 1000 * 1000 / 1000 / blocksize / 8);
 
         // Send less than 64K in a single batch.
         // On Windows, batches above 64K seem to bypass SO_SNDBUF regardless of its size,
