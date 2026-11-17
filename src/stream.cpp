@@ -5,6 +5,7 @@
 
 // standard includes
 #include <csignal>
+#include <cstdlib>
 #include <fstream>
 #include <future>
 #include <iomanip>
