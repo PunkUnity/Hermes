@@ -1586,7 +1586,9 @@ namespace stream {
       // If the number of FEC blocks needed exceeds the protocol limit, turn off FEC for this frame.
       // For normal FEC percentages, this should only happen for enormous frames (over 800 packets at 20%).
       if (fec_blocks_needed > MAX_FEC_BLOCKS) {
-        BOOST_LOG(warning) << "Skipping FEC for abnormally large encoded frame (needed "sv << fec_blocks_needed << " FEC blocks)"sv;
+        BOOST_LOG(warning) << "Skipping FEC for abnormally large encoded "sv << (packet->is_idr() ? "key frame"sv : "frame"sv)
+                           << " ("sv << payload.size() / 1024 << " KiB in "sv << (payload.size() + blocksize - 1) / blocksize
+                           << " packets of "sv << blocksize << " bytes; needed "sv << fec_blocks_needed << " FEC blocks)"sv;
         fecPercentage = 0;
         fec_blocks_needed = MAX_FEC_BLOCKS;
       }
