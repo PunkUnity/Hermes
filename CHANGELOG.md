@@ -102,6 +102,14 @@ run `scripts/bump-version.sh <major|minor|patch>` — it moves everything under
   desktop layout, so monitor 0 could be a KVM capture input or a dummy plug.
   On KWin, the output KScreen marks as primary is now listed first; a
   configured display number still selects the same monitor as before.
+- A detached Steam starts in its own desktop after "Steam Big Picture" was
+  used (from PunkUnity). Before a Steam session, Hermes shuts down the
+  desktop's Steam, since Steam hands a second launch to a running one, but it
+  skipped any Steam in Hermes' own cgroup. Steam Big Picture starts Steam
+  with setsid, so that Steam stays in Hermes' cgroup after the stream, and
+  the next detached Steam handed its launch to it: an empty desktop in the
+  stream, Big Picture on the host. Hermes now spares only a Steam inside an
+  isolated session's own mount namespace.
 
 [#95]: https://github.com/MrOz59/Hermes/pull/95
 [#99]: https://github.com/MrOz59/Hermes/pull/99

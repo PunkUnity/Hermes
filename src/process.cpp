@@ -350,8 +350,14 @@ namespace proc {
       if (pid <= 0 || read_proc_line(pid, "comm") != "steam") {
         return;
       }
-      const auto own = read_proc_line(getpid(), "cgroup");
-      if (own.ends_with(".service") && read_proc_line(pid, "cgroup").starts_with(own)) {
+      // A Steam in an isolated session's private mount namespace is that
+      // session's. Any other is the desktop's, whoever started it: an app such
+      // as Steam Big Picture starts it with setsid, in Hermes' own cgroup, where
+      // it outlives the stream, and a session's Steam would hand its launch to it.
+      struct stat steam_ns {};
+      struct stat own_ns {};
+      if (::stat(("/proc/" + std::to_string(pid) + "/ns/mnt").c_str(), &steam_ns) ||
+          ::stat("/proc/self/ns/mnt", &own_ns) || steam_ns.st_ino != own_ns.st_ino) {
         return;
       }
 
