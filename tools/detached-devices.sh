@@ -34,13 +34,20 @@ for flag in /run/user/"$uid"/hermes/isolated/hermes-detached-*; do
   echo "-- inside the desktop (seen through pid $pid):"
   ls -l "/proc/$pid/root/dev/input/" 2>&1 | sed 's/^/   /'
   ls -l /proc/"$pid"/root/dev/hidraw* /proc/"$pid"/root/dev/uinput 2>&1 | sed "s|/proc/$pid/root||; s/^/   /"
-  echo "-- its processes holding input devices:"
+  echo "-- every process (any container) holding an input device, with its mount namespace:"
+  host_ns="$(readlink /proc/self/ns/mnt)"
   for d in /proc/[0-9]*; do
-    [ "$(readlink "$d/ns/mnt" 2>/dev/null)" = "$ns" ] || continue
+    pns="$(readlink "$d/ns/mnt" 2>/dev/null)" || continue
+    [ "$pns" = "$host_ns" ] && continue
     for f in "$d"/fd/*; do
       l="$(readlink "$f" 2>/dev/null)"
-      case "$l" in /dev/input/*|/dev/hidraw*|/dev/uinput) echo "$(cat "$d/comm" 2>/dev/null) -> $l";; esac
+      case "$l" in /dev/input/*|/dev/hidraw*|/dev/uinput) echo "$(cat "$d/comm" 2>/dev/null)[${d#/proc/}] $pns -> $l";; esac
     done
   done | sort | uniq -c | sed 's/^/   /'
+  echo "-- Valve (Steam Input) virtual pads on the host:"
+  for i in /sys/class/input/input*; do
+    [ "$(cat "$i/id/vendor" 2>/dev/null)" = "28de" ] || continue
+    echo "   $(cat "$i/name") | phys '$(cat "$i/phys")' | $(ls "$i" | grep -E '^(event|js)' | tr '\n' ' ')"
+  done
 done
 [ "$found" = 1 ] || echo "no Hermes detached desktop is running"
