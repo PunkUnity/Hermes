@@ -71,6 +71,11 @@ namespace platf::window_placement {
       }
       class_list += (class_list.empty() ? "\"" : ", \"") + window_class + '"';
     }
+    // The games Steam starts are windows of their own: Proton gives each the
+    // class steam_app_<appid>. Placing only Steam's own window left a game
+    // launched from Big Picture on the primary monitor while the stream showed
+    // Big Picture's empty output. They follow Steam onto the stream's output.
+    const bool steam_games = std::find(classes.begin(), classes.end(), "steam") != classes.end();
     std::string pid_list;
     for (const auto pid : gamescope_pids) {
       if (pid > 1) {
@@ -82,8 +87,13 @@ namespace platf::window_placement {
            "const output = workspace.screens.find(screen => screen.name === \"" + output + "\");\n"
            "const classes = [" + class_list + "];\n"
            "const gamescopePids = [" + pid_list + "];\n"
+           "const steamGames = " + (steam_games ? "true" : "false") + ";\n"
+           "function streamed(window) {\n"
+           "  return classes.includes(window.resourceClass) ||\n"
+           "         (steamGames && String(window.resourceClass).startsWith(\"steam_app_\"));\n"
+           "}\n"
            "function place(window) {\n"
-           "  if (!output || !window.normalWindow || !classes.includes(window.resourceClass) || window.output === output) {\n"
+           "  if (!output || !window.normalWindow || !streamed(window) || window.output === output) {\n"
            "    return;\n"
            "  }\n"
            "  // Other Gamescope instances belong to the local desktop. The shipped\n"
@@ -100,19 +110,40 @@ namespace platf::window_placement {
            "  if (wasFullScreen) {\n"
            "    window.fullScreen = true;\n"
            "  }\n"
+           "  print(\"Hermes: moved \" + window.resourceClass + \" to \" + output.name);\n"
            "}\n"
            "// A client can still pick its own output when it goes fullscreen. Steam\n"
            "// opens Big Picture, is moved here, moves itself back to the primary\n"
            "// monitor and goes fullscreen there; place it again once it has.\n"
+           "// A game can also be fullscreen from its first frame, or move itself\n"
+           "// back to the monitor it chose: place it again when it leaves the\n"
+           "// stream's output, a few times, so a window that insists is not fought\n"
+           "// forever. Its class may only be known once it is set, too.\n"
            "function watch(window) {\n"
-           "  place(window);\n"
+           "  // One budget for every placement after the first: a game that moves\n"
+           "  // back to the monitor it chose each time is left there, not fought.\n"
+           "  let replaced = 0;\n"
+           "  const again = () => {\n"
+           "    if (replaced < 5 && output && window.output !== output && streamed(window)) {\n"
+           "      ++replaced;\n"
+           "      place(window);\n"
+           "    }\n"
+           "  };\n"
            "  if (window.fullScreenChanged) {\n"
            "    window.fullScreenChanged.connect(() => {\n"
            "      if (window.fullScreen) {\n"
-           "        place(window);\n"
+           "        again();\n"
            "      }\n"
            "    });\n"
            "  }\n"
+           "  if (window.outputChanged) {\n"
+           "    window.outputChanged.connect(again);\n"
+           "  }\n"
+           "  if (window.windowClassChanged) {\n"
+           "    window.windowClassChanged.connect(() => place(window));\n"
+           "  }\n"
+           "  // Last, so a move back during this first placement is seen.\n"
+           "  place(window);\n"
            "}\n"
            "workspace.windowList().forEach(watch);\n"
            "workspace.windowAdded.connect(watch);\n";
