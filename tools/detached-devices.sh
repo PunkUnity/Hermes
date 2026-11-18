@@ -29,9 +29,18 @@ for flag in /run/user/"$uid"/hermes/isolated/hermes-detached-*; do
     echo "-- no process left in that namespace"
     continue
   fi
-  echo "-- inside the desktop (entered through pid $pid):"
-  sudo nsenter -t "$pid" -m sh -c 'ls -l /dev/input/ /dev/hidraw* /dev/uinput 2>&1' | sed 's/^/   /'
+  # /proc/<pid>/root is that process's view of the filesystem, its private
+  # /dev included; readable for the user's own processes, so no root needed.
+  echo "-- inside the desktop (seen through pid $pid):"
+  ls -l "/proc/$pid/root/dev/input/" 2>&1 | sed 's/^/   /'
+  ls -l /proc/"$pid"/root/dev/hidraw* /proc/"$pid"/root/dev/uinput 2>&1 | sed "s|/proc/$pid/root||; s/^/   /"
   echo "-- its processes holding input devices:"
-  sudo nsenter -t "$pid" -m sh -c 'for f in /proc/[0-9]*/fd/*; do l=$(readlink "$f" 2>/dev/null); case "$l" in /dev/input/*|/dev/hidraw*|/dev/uinput) p=${f%/fd/*}; echo "$(cat "$p/comm" 2>/dev/null) -> $l";; esac; done | sort | uniq -c' | sed 's/^/   /'
+  for d in /proc/[0-9]*; do
+    [ "$(readlink "$d/ns/mnt" 2>/dev/null)" = "$ns" ] || continue
+    for f in "$d"/fd/*; do
+      l="$(readlink "$f" 2>/dev/null)"
+      case "$l" in /dev/input/*|/dev/hidraw*|/dev/uinput) echo "$(cat "$d/comm" 2>/dev/null) -> $l";; esac
+    done
+  done | sort | uniq -c | sed 's/^/   /'
 done
 [ "$found" = 1 ] || echo "no Hermes detached desktop is running"
