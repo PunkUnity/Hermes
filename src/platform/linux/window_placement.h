@@ -53,6 +53,11 @@ namespace platf::window_placement {
       }
       class_list += (class_list.empty() ? "\"" : ", \"") + window_class + '"';
     }
+    // The games Steam starts are windows of their own: Proton gives each the
+    // class steam_app_<appid>. Placing only Steam's own window left a game
+    // launched from Big Picture on the primary monitor while the stream showed
+    // Big Picture's empty output. They follow Steam onto the stream's output.
+    const bool steam_games = std::find(classes.begin(), classes.end(), "steam") != classes.end();
     std::string pid_list;
     for (const auto pid : gamescope_pids) {
       if (pid > 1) {
@@ -64,8 +69,13 @@ namespace platf::window_placement {
            "const output = workspace.screens.find(screen => screen.name === \"" + output + "\");\n"
            "const classes = [" + class_list + "];\n"
            "const gamescopePids = [" + pid_list + "];\n"
+           "const steamGames = " + (steam_games ? "true" : "false") + ";\n"
+           "function streamed(window) {\n"
+           "  return classes.includes(window.resourceClass) ||\n"
+           "         (steamGames && String(window.resourceClass).startsWith(\"steam_app_\"));\n"
+           "}\n"
            "function place(window) {\n"
-           "  if (!output || !window.normalWindow || !classes.includes(window.resourceClass) || window.output === output) {\n"
+           "  if (!output || !window.normalWindow || !streamed(window) || window.output === output) {\n"
            "    return;\n"
            "  }\n"
            "  // Other Gamescope instances belong to the local desktop. The shipped\n"

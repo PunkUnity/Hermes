@@ -102,6 +102,12 @@ run `scripts/bump-version.sh <major|minor|patch>` — it moves everything under
   desktop layout, so monitor 0 could be a KVM capture input or a dummy plug.
   On KWin, the output KScreen marks as primary is now listed first; a
   configured display number still selects the same monitor as before.
+- Games launched from Steam Big Picture on a virtual display open on that
+  display (from PunkUnity). Hermes moved only Steam's own windows there, so a
+  game, a window of its own (Proton names it `steam_app_<appid>`), opened on
+  the primary monitor while the stream showed Big Picture's empty output.
+  Windows of class `steam_app_*` now follow Steam. Native games with their
+  own window class are not covered yet.
 
 [#95]: https://github.com/MrOz59/Hermes/pull/95
 [#99]: https://github.com/MrOz59/Hermes/pull/99

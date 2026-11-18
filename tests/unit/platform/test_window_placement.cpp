@@ -46,4 +46,13 @@ TEST(WindowPlacement, RecognizesQuotedGamescopeAndTheShippedLauncher) {
   EXPECT_TRUE(launches_gamescope(split_unix("'/path with spaces/hermes-gamescope-launch'")));
   EXPECT_FALSE(launches_gamescope(split_unix("steam -bigpicture")));
 }
+
+TEST(WindowPlacement, SteamsGamesFollowItOntoTheStreamsOutput) {
+  using platf::window_placement::kwin_script;
+  const auto steam = kwin_script("Virtual-1", {"steam"}, {});
+  EXPECT_NE(steam.find("const steamGames = true;"), std::string::npos);
+  EXPECT_NE(steam.find("startsWith(\"steam_app_\")"), std::string::npos);
+  const auto gamescope = kwin_script("Virtual-1", {"gamescope"}, {4242});
+  EXPECT_NE(gamescope.find("const steamGames = false;"), std::string::npos);
+}
 #endif
