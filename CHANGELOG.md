@@ -28,6 +28,13 @@ run `scripts/bump-version.sh <major|minor|patch>` — it moves everything under
   the host's sound server, Hermes now logs a warning once per application
   and output: `Audio from <app> -> <sink> does not reach the client, which
   hears <stream sink>`.
+- Per-app `limit-fps` (Linux, off by default; from PunkUnity): cap what the
+  app starts at the stream's frame rate, so games don't render frames the
+  stream drops. Hermes sets `DXVK_FRAME_RATE` and `VKD3D_FRAME_RATE` (DXVK
+  and VKD3D-Proton builds that keep their limiter, such as Proton-CachyOS)
+  and adds `fps_limit` to `MANGOHUD_CONFIG` for MangoHud users, keeping
+  their MangoHud.conf. Nothing extra is required, and MangoHud is never
+  turned on. The previous values come back when the app ends.
 - `virtual-display-layout: primary` (Linux, KDE/KWin; from PunkUnity): extend,
   with the virtual display as the primary monitor for the session. Games
   launched from Big Picture open on the primary output, so in the extend
