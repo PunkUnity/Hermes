@@ -1,14 +1,26 @@
 #!/usr/bin/env bash
-# Rebuild Hermes' prebuilt libavcodec with the VAAPI intra-refresh patch.
-#   bash build-intra-refresh-ffmpeg.sh ~/hermes-touch
-# Leaves a copy of the prebuilt FFmpeg, with the patched libavcodec.a, in
-# ~/hermes-ffmpeg/dist, for -DFFMPEG_PREPARED_BINARIES. The original stays as it is.
+# Rebuild Hermes' prebuilt libavcodec with the VAAPI intra-refresh patch and
+# put it in the checkout's prebuilt FFmpeg, keeping the original beside it.
+#   bash build-intra-refresh-ffmpeg.sh ~/hermes-touch            # patch
+#   bash build-intra-refresh-ffmpeg.sh ~/hermes-touch --restore  # put the original back
+# Then build Hermes as usual, without -DFFMPEG_PREPARED_BINARIES: with that
+# option Hermes links no x264/x265/SVT-AV1 or VA libraries (common.cmake).
 set -eu
 src="${1:?path to the Hermes checkout}"
 orig="$src/third-party/build-deps/dist/Linux-x86_64"
 work="$HOME/hermes-ffmpeg"
 here="$(cd "$(dirname "$0")" && pwd)"
 [ -f "$orig/lib/libavcodec.a" ] || { echo "no prebuilt FFmpeg at $orig"; exit 1; }
+if [ "${2:-}" = "--restore" ]; then
+  [ -f "$orig/lib/libavcodec.a.orig" ] || { echo "no saved original"; exit 1; }
+  mv -f "$orig/lib/libavcodec.a.orig" "$orig/lib/libavcodec.a"
+  echo "original libavcodec.a restored"
+  exit 0
+fi
+# Configure against the original, also when the patched one is in place.
+if [ -f "$orig/lib/libavcodec.a.orig" ]; then
+  cp -f "$orig/lib/libavcodec.a.orig" "$orig/lib/libavcodec.a"
+fi
 version="$(sed -n 's/.*FFMPEG_VERSION "\(.*\)".*/\1/p' "$orig/include/libavutil/ffversion.h")"
 case "$version" in
   6400860*) commit=6400860b9d4bec5ace91ec3a5e43ad76f9660579; patch="$here/vaapi-intra-refresh-7.1.patch" ;;
@@ -47,4 +59,6 @@ PKG_CONFIG_PATH="$work/pc" ./configure --pkg-config-flags=--static \
 make -j"$(nproc)" libavcodec/libavcodec.a > "$work/make.log" 2>&1 || { tail -20 "$work/make.log"; exit 1; }
 cp libavcodec/libavcodec.a "$work/dist/lib/libavcodec.a"
 grep -qa "Rolling intra refresh" "$work/dist/lib/libavcodec.a" || { echo "the patched code is missing from libavcodec.a"; exit 1; }
-echo "patched FFmpeg ready: $work/dist"
+[ -f "$orig/lib/libavcodec.a.orig" ] || cp "$orig/lib/libavcodec.a" "$orig/lib/libavcodec.a.orig"
+cp -f libavcodec/libavcodec.a "$orig/lib/libavcodec.a"
+echo "patched libavcodec installed in $orig/lib (original saved as libavcodec.a.orig)"
