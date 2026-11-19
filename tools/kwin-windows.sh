@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# List every normal window KWin manages: window class, PID, output, fullscreen, title.
+# List every normal window KWin manages: window class, PID, output, fullscreen, which one has focus (ACTIVE), title.
 # Usage: bash kwin-windows.sh   (run as the desktop user; works over SSH)
 set -u
 export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/user/$(id -u)/bus}"
@@ -9,7 +9,7 @@ cat > "$js" <<JS
 for (const w of workspace.windowList()) {
   if (!w.normalWindow) continue;
   print("$tag " + w.resourceClass + " | pid " + w.pid + " | " + (w.output ? w.output.name : "?") +
-        (w.fullScreen ? " | fullscreen" : "") + " | " + w.caption);
+        (w.fullScreen ? " | fullscreen" : "") + (w === workspace.activeWindow ? " | ACTIVE" : "") + " | " + w.caption);
 }
 JS
 since="$(date '+%Y-%m-%d %H:%M:%S')"
