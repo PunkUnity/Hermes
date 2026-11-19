@@ -80,6 +80,11 @@ case "${1:-}" in
   stop)
     systemctl --user stop hermes-test-recorder 2>/dev/null
     [ -f "$dir/readings.txt" ] || { echo "no recording"; exit 1; }
+    started="$(cat "$dir/start" 2>/dev/null || echo 0)"
+    echo "=== recording started $(date -d "@$started" '+%Y-%m-%d %H:%M:%S')"
+    if [ $(( $(date +%s) - started )) -gt 1200 ]; then
+      echo "!!! this recording is old: 'start' was not run before this test, so the readings below are from an earlier test"
+    fi
     out="$HOME/hermes-tests/$(date +%Y%m%d-%H%M%S)"
     cp -r "$dir" "$out"
     tail -n +"$(cat "$dir/log-start")" "$HOME/.config/hermes/hermes.log" > "$out/hermes.log" 2>/dev/null
