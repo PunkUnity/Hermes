@@ -66,11 +66,12 @@ case "${1:-}" in
     echo "$nic" > "$dir/nic"
     systemd-run --user --quiet --unit=hermes-test-recorder bash -c "
       end=\$(( \$(date +%s) + $minutes*60 ))
-      prev=\$(cat /sys/class/net/$nic/statistics/tx_bytes)
+      prev=\$(cat /sys/class/net/$nic/statistics/tx_bytes); prev_t=\$(date +%s)
       while [ \$(date +%s) -lt \$end ]; do
-        now=\$(cat /sys/class/net/$nic/statistics/tx_bytes)
-        { echo \"===== \$(date +%H:%M:%S)\"; echo \"## network: \$(( (now-prev)*8/20/1000000 )) Mbps sent\"; bash '$here/test-recorder.sh' reading; } >> '$dir/readings.txt' 2>&1
-        prev=\$now
+        now=\$(cat /sys/class/net/$nic/statistics/tx_bytes); now_t=\$(date +%s)
+        span=\$(( now_t > prev_t ? now_t - prev_t : 1 ))
+        { echo \"===== \$(date +%H:%M:%S)\"; echo \"## network: \$(( (now-prev)*8/span/1000000 )) Mbps sent\"; bash '$here/test-recorder.sh' reading; } >> '$dir/readings.txt' 2>&1
+        prev=\$now; prev_t=\$now_t
         sleep 20
       done"
     echo "recording for $minutes min (stop early with: bash $here/test-recorder.sh stop)"
