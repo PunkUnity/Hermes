@@ -98,6 +98,13 @@ run `scripts/bump-version.sh <major|minor|patch>` — it moves everything under
   per-session addresses.
 
 ### Fixed
+- The mirror virtual-display layout on KDE shows the whole primary monitor when
+  the stream is smaller than it (from PunkUnity). KWin mirrors by overlap, so a
+  1280x720 stream over a 2560x1440 monitor showed only its top-left quarter, and
+  the Gamescope Steam Session app reached the client cropped and off-centre.
+  Hermes now scales the virtual output (0.5 in that case) so it covers the
+  monitor, and names scale 1 in the other layouts, as KWin replays a remembered
+  scale.
 - The Gamescope Steam Session app no longer ends within a second when a Steam
   is already running (from PunkUnity). Gamescope's own client is a new
   `steam -bigpicture`; Steam runs once per user, so it handed the request to
