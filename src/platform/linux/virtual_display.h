@@ -981,6 +981,20 @@ namespace VDISPLAY {
    */
   double kscreenMirrorScale(int mode_width, int mode_height, int target_width, int target_height);
 
+  /**
+   * @brief Where a scaled mirroring virtual output goes so the mirrored output is centred in it.
+   *
+   * With another aspect ratio the virtual output's logical size is larger than
+   * the target's in one direction; the extra is split between both sides
+   * rather than left beyond the right or bottom edge.
+   *
+   * @param target The mirrored output (logical geometry).
+   * @param mode_width The virtual output's mode width, in pixels.
+   * @param mode_height The virtual output's mode height, in pixels.
+   * @param scale The virtual output's scale, from kscreenMirrorScale().
+   */
+  kscreen_point_t kscreenMirrorPosition(const kscreen_output_t &target, int mode_width, int mode_height, double scale);
+
   /** @brief What `kscreen-doctor -j` says about a mode on one output. */
   enum class kscreen_mode_state_e {
     unknown_output,  ///< KWin does not report that output at all.

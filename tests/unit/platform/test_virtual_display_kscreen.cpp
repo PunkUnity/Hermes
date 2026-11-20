@@ -665,3 +665,28 @@ TEST(KScreenLayout, NamesTheVirtualOutputsScaleWhenGivenOne) {
   EXPECT_NE(unscaled.find(" output.Virtual-1.scale.1"), std::string::npos);
   EXPECT_EQ(unscaled.find("scale.1."), std::string::npos);
 }
+
+TEST(KScreenMirrorPosition, TheSameShapeSitsOnTheMonitor) {
+  const VDISPLAY::kscreen_output_t dp2 {"DP-2", true, true, 1, 0, 0, 2560, 1440};
+  const auto at = VDISPLAY::kscreenMirrorPosition(dp2, 1280, 720, 0.5);
+  EXPECT_EQ(at.x, 0);
+  EXPECT_EQ(at.y, 0);
+}
+
+TEST(KScreenMirrorPosition, AWiderStreamCentresTheMonitor) {
+  // 2400x1080 at 0.75 is 3200x1440 logical: 320 either side of a 2560 monitor.
+  const VDISPLAY::kscreen_output_t dp2 {"DP-2", true, true, 1, 1920, 0, 2560, 1440};
+  const auto at = VDISPLAY::kscreenMirrorPosition(dp2, 2400, 1080, 0.75);
+  EXPECT_EQ(at.x, 1920 - 320);
+  EXPECT_EQ(at.y, 0);
+}
+
+TEST(KScreenMirrorPosition, ATallerStreamCentresVertically) {
+  // A 2560x1600 tablet at 1.0 is 160 taller than a 2560x1440 monitor.
+  const VDISPLAY::kscreen_output_t dp2 {"DP-2", true, true, 1, 0, 0, 2560, 1440};
+  const double scale = VDISPLAY::kscreenMirrorScale(2560, 1600, 2560, 1440);
+  EXPECT_DOUBLE_EQ(scale, 1.0);
+  const auto at = VDISPLAY::kscreenMirrorPosition(dp2, 2560, 1600, scale);
+  EXPECT_EQ(at.x, 0);
+  EXPECT_EQ(at.y, -80);
+}

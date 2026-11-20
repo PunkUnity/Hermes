@@ -2535,6 +2535,20 @@ namespace VDISPLAY {
     return command;
   }
 
+  kscreen_point_t kscreenMirrorPosition(const kscreen_output_t &target, int mode_width, int mode_height, double scale) {
+    if (scale <= 0) {
+      return {target.x, target.y};
+    }
+    // The logical size is at least the target's; split what is left over
+    // evenly on both sides, so the target sits in the middle of the stream.
+    const int logical_width = static_cast<int>(std::lround(mode_width / scale));
+    const int logical_height = static_cast<int>(std::lround(mode_height / scale));
+    return {
+      target.x - std::max(0, logical_width - target.width) / 2,
+      target.y - std::max(0, logical_height - target.height) / 2,
+    };
+  }
+
   double kscreenMirrorScale(int mode_width, int mode_height, int target_width, int target_height) {
     if (mode_width <= 0 || mode_height <= 0 || target_width <= 0 || target_height <= 0) {
       return 0;
@@ -3054,8 +3068,8 @@ namespace VDISPLAY {
     ) {
       const auto current = outputs();
       const auto position = kscreenVirtualOutputPosition(virtual_output, before, current, layout);
-      const int target_x = position.x;
-      const int target_y = position.y;
+      int target_x = position.x;
+      int target_y = position.y;
 
       std::map<std::string, kscreen_point_t> positions_before;
       for (const auto &output : before) {
@@ -3076,10 +3090,13 @@ namespace VDISPLAY {
           scale = kscreenMirrorScale(mode_width, mode_height, target->width, target->height);
           if (scale <= 0) {
             scale = 1;
-          } else if (scale != 1) {
-            BOOST_LOG(info) << "[VDISPLAY/KScreen] Scaling " << virtual_output << " by " << scale
-                            << " so it mirrors all of " << target->name << " (" << target->width << 'x'
-                            << target->height << ") rather than its top-left corner.";
+          } else {
+            const auto centred = kscreenMirrorPosition(*target, mode_width, mode_height, scale);
+            target_x = centred.x;
+            target_y = centred.y;
+            BOOST_LOG(info) << "[VDISPLAY/KScreen] Scaling " << virtual_output << " by " << scale << " at "
+                            << target_x << ',' << target_y << " so it mirrors all of " << target->name << " ("
+                            << target->width << 'x' << target->height << "), centred.";
           }
         }
       }
