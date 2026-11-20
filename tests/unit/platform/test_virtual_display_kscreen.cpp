@@ -619,3 +619,49 @@ TEST(KWinInputBinding, BindsOnlyHermesTouchAndPenDevices) {
   // KWin's.
   EXPECT_FALSE(VDISPLAY::isHermesKWinInputDevice("Hermes Session Touch", 0xBEEF, 0xDEAD));
 }
+
+TEST(KScreenMirrorScale, ASmallerStreamCoversTheWholeMonitor) {
+  // The reported case: a 1280x720 stream mirroring a 2560x1440 monitor showed
+  // its top-left quarter, so a fullscreen Gamescope reached the client cropped
+  // and off-centre.
+  EXPECT_DOUBLE_EQ(VDISPLAY::kscreenMirrorScale(1280, 720, 2560, 1440), 0.5);
+  EXPECT_DOUBLE_EQ(VDISPLAY::kscreenMirrorScale(2560, 1440, 2560, 1440), 1.0);
+  EXPECT_DOUBLE_EQ(VDISPLAY::kscreenMirrorScale(1920, 1080, 2560, 1440), 0.75);
+}
+
+TEST(KScreenMirrorScale, AnotherAspectRatioStillCoversBothDirections) {
+  // A phone-shaped stream: the logical size reaches the monitor's height, and
+  // its extra width lies beyond the monitor's right edge.
+  const double scale = VDISPLAY::kscreenMirrorScale(2400, 1080, 2560, 1440);
+  EXPECT_DOUBLE_EQ(scale, 0.75);
+  EXPECT_GE(2400 / scale, 2560);
+  EXPECT_GE(1080 / scale, 1440);
+}
+
+TEST(KScreenMirrorScale, RoundsDownToKWinsSteps) {
+  // 854/2560 is 0.3336...: 40/120 keeps the logical width at least 2560.
+  const double scale = VDISPLAY::kscreenMirrorScale(854, 480, 2560, 1440);
+  EXPECT_DOUBLE_EQ(scale, 40.0 / 120.0);
+  EXPECT_GE(854 / scale, 2560);
+  EXPECT_GE(480 / scale, 1440);
+}
+
+TEST(KScreenMirrorScale, NoSizeNoScale) {
+  EXPECT_EQ(VDISPLAY::kscreenMirrorScale(0, 720, 2560, 1440), 0);
+  EXPECT_EQ(VDISPLAY::kscreenMirrorScale(1280, 720, 2560, 0), 0);
+}
+
+TEST(KScreenLayout, NamesTheVirtualOutputsScaleWhenGivenOne) {
+  EXPECT_EQ(
+    VDISPLAY::buildKScreenLayoutCommand("Virtual-1", kSinglePhysical, 0, 0, 1280, 720, 60, {}, VDISPLAY::virtual_display_layout_e::mirror, 0.5),
+    "kscreen-doctor"
+    " output.DP-2.enable output.DP-2.priority.1"
+    " output.Virtual-1.enable output.Virtual-1.priority.2"
+    " output.Virtual-1.position.0,0"
+    " output.Virtual-1.mode.1280x720@60"
+    " output.Virtual-1.scale.0.5"
+  );
+  const auto unscaled = VDISPLAY::buildKScreenLayoutCommand("Virtual-1", kSinglePhysical, 2560, 0, 1280, 720, 60, {}, VDISPLAY::virtual_display_layout_e::extend, 1);
+  EXPECT_NE(unscaled.find(" output.Virtual-1.scale.1"), std::string::npos);
+  EXPECT_EQ(unscaled.find("scale.1."), std::string::npos);
+}
