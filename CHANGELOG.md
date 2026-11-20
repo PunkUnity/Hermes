@@ -103,8 +103,9 @@ run `scripts/bump-version.sh <major|minor|patch>` — it moves everything under
   1280x720 stream over a 2560x1440 monitor showed only its top-left quarter, and
   the Gamescope Steam Session app reached the client cropped and off-centre.
   Hermes now scales the virtual output (0.5 in that case) so it covers the
-  monitor, and names scale 1 in the other layouts, as KWin replays a remembered
-  scale.
+  monitor at any stream resolution, and centres the monitor in it when the
+  shapes differ (a 20:9 phone or a 16:10 tablet over a 16:9 monitor). The other
+  layouts name scale 1, as KWin replays a remembered scale.
 - The Gamescope Steam Session app no longer ends within a second when a Steam
   is already running (from PunkUnity). Gamescope's own client is a new
   `steam -bigpicture`; Steam runs once per user, so it handed the request to
