@@ -106,6 +106,14 @@ run `scripts/bump-version.sh <major|minor|patch>` — it moves everything under
   per-session addresses.
 
 ### Fixed
+- Input packets are size-checked before Hermes reads them (from PunkUnity). A
+  paired client could send a packet shorter than the structure its type names,
+  or a declared size beyond the bytes received, and Hermes read past it and
+  batched into it, writing past the buffer; a keyboard-text packet's declared
+  length was trusted the same way (the same bugs as Sunshine's
+  GHSA-26q2-58j6-qmvv and GHSA-6w33-pjh7-p77c). The check runs before the
+  per-client permission check, which read the packet's type first. Malformed
+  packets are dropped with a warning.
 - Stopping the desktop's Steam before a session, and starting it again after a
   nested Gamescope app, works with Flatpak Steam too (from PunkUnity). Its pid
   file is in the Flatpak's home and holds a pid from inside the sandbox, so
