@@ -33,6 +33,9 @@ Unless otherwise specified, authentication is required for all API calls.
 ## POST /api/pin
 @copydoc confighttp::savePin()
 
+## GET /api/pin/pending
+@copydoc confighttp::getPendingPairs()
+
 ## GET /api/apps
 @copydoc confighttp::getApps()
 
