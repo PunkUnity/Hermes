@@ -110,8 +110,9 @@ run `scripts/bump-version.sh <major|minor|patch>` — it moves everything under
   PunkUnity). A packet shorter than its 2-byte type made Hermes read past it
   and could end the process (the same bug as Sunshine's GHSA-c428-87f8-rrv5),
   and an encrypted message whose header claimed more bytes than were received
-  was read up to 64 KB past the packet (as Wolf fixed in November). Both are
-  now dropped with a warning.
+  was read up to 64 KB past the packet (as Wolf fixed in November). Legacy
+  (unencrypted control stream) input trusted its length the same way, a
+  negative one included. All three are now dropped with a warning.
 - Stopping the desktop's Steam before a session, and starting it again after a
   nested Gamescope app, works with Flatpak Steam too (from PunkUnity). Its pid
   file is in the Flatpak's home and holds a pid from inside the sandbox, so

@@ -624,6 +624,29 @@ namespace stream {
     return encrypted_control_t {util::endian::little(seq), payload.substr(header_size, length - sizeof(seq))};
   }
 
+  /**
+   * @brief Read the tagged cipher of a legacy input message.
+   *
+   * Before the encrypted control stream, input arrived as a big-endian 32-bit
+   * length and that many bytes of tagged cipher; the length must fit in what
+   * arrived.
+   * @return The tagged cipher, or `std::nullopt` when it doesn't fit.
+   */
+  std::optional<std::string_view> parse_legacy_input(std::string_view payload) {
+    std::int32_t length;
+    if (payload.size() < sizeof(length)) {
+      return std::nullopt;
+    }
+
+    std::memcpy(&length, payload.data(), sizeof(length));
+    length = util::endian::big(length);
+    if (length < 0 || static_cast<std::size_t>(length) > payload.size() - sizeof(length)) {
+      return std::nullopt;
+    }
+
+    return payload.substr(sizeof(length), static_cast<std::size_t>(length));
+  }
+
   session_t *control_server_t::get_session(const net::peer_t peer, uint32_t connect_data) {
     {
       // Fast path - look up existing session by peer
@@ -1136,8 +1159,13 @@ namespace stream {
     server->map(packetTypes[IDX_INPUT_DATA], [&](session_t *session, const std::string_view &payload) {
       BOOST_LOG(debug) << "type [IDX_INPUT_DATA]"sv;
 
-      auto tagged_cipher_length = util::endian::big(*(int32_t *) payload.data());
-      std::string_view tagged_cipher {payload.data() + sizeof(tagged_cipher_length), (size_t) tagged_cipher_length};
+      const auto message = parse_legacy_input(payload);
+      if (!message) {
+        BOOST_LOG(warning) << "Control: input with a length beyond the bytes received"sv;
+        return;
+      }
+      const auto tagged_cipher = *message;
+      const auto tagged_cipher_length = tagged_cipher.size();
 
       std::vector<uint8_t> plaintext;
 

@@ -50,6 +50,7 @@ namespace stream {
   };
 
   std::optional<encrypted_control_t> parse_encrypted_control(std::string_view payload);
+  std::optional<std::string_view> parse_legacy_input(std::string_view payload);
 }  // namespace stream
 
 namespace {
@@ -109,4 +110,17 @@ TEST(ControlPacketTests, ARuntEncryptedMessageIsDropped) {
   // Shorter than seq + tag + the encrypted type and length.
   EXPECT_FALSE(stream::parse_encrypted_control(encrypted_payload(23, 1, 19)));
   EXPECT_TRUE(stream::parse_encrypted_control(encrypted_payload(24, 1, 20)));
+}
+
+TEST(ControlPacketTests, LegacyInputMustFitItsLength) {
+  // Big-endian length, then that many bytes.
+  const std::string fits {"\x00\x00\x00\x03" "abc", 7};
+  const auto cipher = stream::parse_legacy_input(fits);
+  ASSERT_TRUE(cipher);
+  EXPECT_EQ(*cipher, "abc");
+
+  EXPECT_FALSE(stream::parse_legacy_input(std::string_view {"\x00\x00", 2}));
+  EXPECT_FALSE(stream::parse_legacy_input(std::string_view {"\x00\x00\x00\x04" "abc", 7}));
+  // A negative length used to become a huge size.
+  EXPECT_FALSE(stream::parse_legacy_input(std::string_view {"\xff\xff\xff\xff" "abc", 7}));
 }
