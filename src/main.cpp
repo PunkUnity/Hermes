@@ -4,10 +4,13 @@
  */
 // standard includes
 #include <algorithm>
+#include <cerrno>
 #include <codecvt>
 #include <csignal>
+#include <cstring>
 #include <fstream>
 #include <iostream>
+#include <sys/auxv.h>
 
 // local includes
 #include "confighttp.h"
@@ -26,6 +29,7 @@
 
   #include "platform/linux/virtual_display.h"
   #include "platform/linux/prelogin.h"
+  #include "platform/linux/privileged_environment.h"
   #include "platform/linux/session_attach.h"
 
   #include <boost/log/core.hpp>
@@ -102,6 +106,14 @@ void mainThreadLoop(const std::shared_ptr<safe::event_t<bool>> &shutdown_event) 
 }
 
 int main(int argc, char *argv[]) {
+  // Hermes' file capability puts it in secure-execution mode. Before the tray
+  // or anything else can initialize a GUI toolkit, drop the variables that
+  // would make one load a module with those capabilities.
+  if (getauxval(AT_SECURE) != 0 && !platf::privileged_environment::sanitize()) {
+    std::cerr << "Failed to clean the environment for running with capabilities: " << std::strerror(errno) << '\n';
+    return 1;
+  }
+
   lifetime::argv = argv;
 
   task_pool_util::TaskPool::task_id_t force_shutdown = nullptr;
