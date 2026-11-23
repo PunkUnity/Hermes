@@ -106,6 +106,14 @@ run `scripts/bump-version.sh <major|minor|patch>` — it moves everything under
   per-session addresses.
 
 ### Fixed
+- A PIN typed on the pairing page goes to the device it was meant for (from
+  PunkUnity). Hermes gave it to whichever request was waiting first, so a
+  second device pairing at the same moment could receive it (the same issue as
+  Sunshine's GHSA-36ff-frg7-492f). The page now lists the waiting requests with
+  their name and address and sends the PIN for the one picked (`request_id`,
+  from the new `GET /api/pin/pending`); the Game Mode console sends the one it
+  shows. Moonlight-based clients share a client ID, so a request still waiting
+  for its PIN is only replaced by a retry from the same address.
 - Stopping the desktop's Steam before a session, and starting it again after a
   nested Gamescope app, works with Flatpak Steam too (from PunkUnity). Its pid
   file is in the Flatpak's home and holds a pid from inside the sandbox, so
