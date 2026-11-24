@@ -125,7 +125,9 @@ snapshot() {
   echo "   steam client:    $(pgrep -x steam | tr '\n' ' ')  (steamwebhelper: $(pgrep -c steamwebhelpe))"
   echo "   gamescope:       $(pgrep -x gamescope | tr '\n' ' ')"
   echo "   kwin_wayland:    $(pgrep -x kwin_wayland | tr '\n' ' ')  (more than one = isolated sessions)"
-  echo "== Hermes-KMS: module $(modinfo -F version hermes_kms 2>/dev/null || read_file /sys/module/hermes_kms/version)," \
+  kms_version="$(modinfo -F version hermes_kms 2>/dev/null)"
+  [ -n "$kms_version" ] || kms_version="$(modinfo -F srcversion hermes_kms 2>/dev/null)"
+  echo "== Hermes-KMS: module ${kms_version:--}," \
        "$( [ -d /sys/module/hermes_kms ] && echo loaded || echo 'not loaded')"
   for connector in /sys/class/drm/card*-Virtual-*; do
     [ -r "$connector/status" ] || continue
