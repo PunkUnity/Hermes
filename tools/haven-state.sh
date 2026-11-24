@@ -6,6 +6,7 @@
 set -u
 label="${1:-}"
 uid="$(id -u)"
+user="${USER:-$(id -un)}"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$uid}"
 export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}"
 if [ -z "${WAYLAND_DISPLAY:-}" ]; then
@@ -32,6 +33,32 @@ snapshot() {
     grep -E 'Executing: |Session resuming|Session ended|CLIENT (CONNECTED|DISCONNECTED)|Positioned |Scaling ' |
     tail -4 | sed 's/^/   last: /'
 
+  echo "== History:"
+  echo "   booted:          $(uptime -s 2>/dev/null)"
+  journalctl --list-boots --no-pager -q 2>/dev/null | tail -3 | awk '{printf "   boot %-4s       %s %s %s -> %s %s %s\n", $1, $3, $4, $5, $6, $7, $8}' ||
+    true
+  last -x -n 6 shutdown reboot 2>/dev/null | grep -E '^(shutdown|reboot)' | sed 's/^/   /'
+  echo "   logins ($user):"
+  last -n 4 "$user" 2>/dev/null | grep -v '^$\|^wtmp' | sed 's/^/     /'
+  for session in $(loginctl list-sessions --no-legend 2>/dev/null | awk -v u="$user" '$3 == u {print $1}'); do
+    loginctl show-session "$session" -p Type -p Class -p State -p Active -p LockedHint -p Timestamp --value 2>/dev/null |
+      paste -sd' ' | sed "s/^/     session $session: /"
+  done
+  echo "   hermes started:  $(systemctl --user show hermes -p ActiveEnterTimestamp --value 2>/dev/null)"
+  echo "   monitor changes (hermes-monitor-watch):"
+  if journalctl --user -t hermes-monitor-watch -n 1 -q --no-pager >/dev/null 2>&1 &&
+     [ -n "$(journalctl --user -t hermes-monitor-watch -n 1 -q --no-pager 2>/dev/null)" ]; then
+    journalctl --user -t hermes-monitor-watch -n 6 -o short-iso --no-pager -q 2>/dev/null | sed 's/^/     /'
+  else
+    echo "     (no lines: install it with 'bash monitor-watch.sh install')"
+  fi
+  echo "   suspend/resume this boot:"
+  journalctl -b -q --no-pager -o short-iso -u systemd-suspend.service -u systemd-hibernate.service 2>/dev/null |
+    grep -E 'Starting|Finished|Deactivated' | tail -4 | sed 's/^/     /' || true
+  echo "   kernel display messages this boot (last 4):"
+  journalctl -k -b -q --no-pager -o short-iso 2>/dev/null | grep -iE 'DP-[0-9]|HDMI-A|hotplug|link train|dpcd' |
+    tail -4 | sed 's/^/     /' || true
+
   echo "== Monitors (kernel): connector status enabled dpms"
   for connector in /sys/class/drm/card*-*; do
     [ -r "$connector/status" ] || continue
@@ -53,7 +80,12 @@ snapshot() {
 
   echo "== Windows (bottom to top):"
   if [ -r "$here/kwin-windows.sh" ]; then
-    bash "$here/kwin-windows.sh" 2>/dev/null | sed 's/^/   /'
+    windows="$(bash "$here/kwin-windows.sh" 2>&1)"
+    if [ -n "$windows" ]; then
+      printf '%s\n' "$windows" | sed 's/^/   /'
+    else
+      echo "   (none: no normal windows open, or KWin did not answer)"
+    fi
   else
     echo "   (kwin-windows.sh not next to this script)"
   fi
@@ -93,7 +125,8 @@ snapshot() {
   echo "   steam client:    $(pgrep -x steam | tr '\n' ' ')  (steamwebhelper: $(pgrep -c steamwebhelpe))"
   echo "   gamescope:       $(pgrep -x gamescope | tr '\n' ' ')"
   echo "   kwin_wayland:    $(pgrep -x kwin_wayland | tr '\n' ' ')  (more than one = isolated sessions)"
-  echo "== Hermes-KMS: module $(read_file /sys/module/hermes_kms/version)"
+  echo "== Hermes-KMS: module $(modinfo -F version hermes_kms 2>/dev/null || read_file /sys/module/hermes_kms/version)," \
+       "$( [ -d /sys/module/hermes_kms ] && echo loaded || echo 'not loaded')"
   for connector in /sys/class/drm/card*-Virtual-*; do
     [ -r "$connector/status" ] || continue
     printf '   %-22s %-12s %s\n' "$(basename "$connector")" "$(read_file "$connector/status")" "$(read_file "$connector/enabled")"
