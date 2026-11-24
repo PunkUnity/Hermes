@@ -214,6 +214,15 @@ const permissionGroups = [
 
 let currentEditingClient: Client | null = null;
 
+/** A pairing request waiting for a PIN, from /api/pin/pending. */
+interface PendingPair {
+  id: string;
+  name: string;
+  address: string;
+}
+
+let pendingPairsTimer: number | undefined;
+
 const data = () => {
   return {
     platform: '',
@@ -221,6 +230,8 @@ const data = () => {
     currentTab: location.hash || '#OTP',
     pin: '',
     pinName: '',
+    pendingPairs: [] as PendingPair[],
+    pendingPairId: '',
     pairStatus: null as 'pending' | 'failure' | null,
     otp: '',
     passphrase: '',
@@ -271,9 +282,14 @@ export default defineComponent({
     // this page, so the list refreshes itself rather than going stale behind
     // a reload the reader has no reason to think they need.
     this.sessionTimer = window.setInterval(() => this.refreshSessions(), 5000);
+    // A request appears when the device starts pairing; the PIN is sent for
+    // the one the user picks, so the list has to be current.
+    this.refreshPendingPairs();
+    pendingPairsTimer = window.setInterval(() => this.refreshPendingPairs(), 2000);
   },
   beforeUnmount() {
     clearInterval(this.sessionTimer);
+    clearInterval(pendingPairsTimer);
   },
   methods: {
     switchTab(currentTab: string) {
@@ -293,14 +309,31 @@ export default defineComponent({
       this.editingHost = false;
       saveHostCache(this, true);
     },
+    async refreshPendingPairs(): Promise<void> {
+      try {
+        const response = await fetch("./api/pin/pending", { credentials: 'include' });
+        const result: { requests?: PendingPair[] } = await response.json();
+        this.pendingPairs = result.requests ?? [];
+      } catch {
+        this.pendingPairs = [];
+      }
+      if (!this.pendingPairs.some(request => request.id === this.pendingPairId)) {
+        // Choose for the user only when there is nothing to choose between.
+        this.pendingPairId = this.pendingPairs.length === 1 ? this.pendingPairs[0].id : '';
+      }
+    },
     async registerDevice(): Promise<void> {
       this.pairStatus = null;
+      if (!this.pendingPairId) {
+        this.pairStatus = 'failure';
+        return;
+      }
       try {
         const response = await fetch("./api/pin", {
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           method: 'POST',
-          body: JSON.stringify({ pin: this.pin, name: this.pinName }),
+          body: JSON.stringify({ pin: this.pin, name: this.pinName, request_id: this.pendingPairId }),
         });
         const result: { status?: boolean } = await response.json();
         if (result.status !== true) {
@@ -678,9 +711,17 @@ export default defineComponent({
     </ul>
     <form v-if="currentTab === '#PIN'" class="form d-flex flex-column align-items-center" id="form" @submit.prevent="registerDevice">
       <div class="card flex-column d-flex p-4 mb-4">
+        <div v-if="pendingPairs.length === 0" class="text-secondary" role="status">{{ $t('pin.pending_none') }}</div>
+        <fieldset v-else>
+          <legend class="fs-6">{{ $t('pin.pending_choose') }}</legend>
+          <div v-for="request in pendingPairs" :key="request.id" class="form-check">
+            <input class="form-check-input" type="radio" name="pending-pair" :id="`pending-${request.id}`" :value="request.id" v-model="pendingPairId" />
+            <label class="form-check-label" :for="`pending-${request.id}`">{{ request.name || $t('pin.unpair_single_unknown') }} <span class="text-secondary">({{ request.address }})</span></label>
+          </div>
+        </fieldset>
         <input type="text" pattern="\d*" :placeholder="`${$t('navbar.pin')}`" autofocus id="pin-input" v-model="pin" class="form-control mt-2" required />
         <input type="text" :placeholder="`${$t('pin.device_name')}`" id="name-input" v-model="pinName" class="form-control my-4" />
-        <button class="btn btn-primary">{{ $t('pin.send') }}</button>
+        <button class="btn btn-primary" :disabled="!pendingPairId">{{ $t('pin.send') }}</button>
       </div>
       <div id="status">
         <div v-if="pairStatus === 'pending'" class="alert alert-info" role="status">{{ $t('pin.pair_pending') }}</div>

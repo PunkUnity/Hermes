@@ -166,6 +166,14 @@ run `scripts/bump-version.sh <major|minor|patch>` — it moves everything under
   so whoever set Hermes' environment could run code with CAP_SYS_ADMIN (the
   same issue as Sunshine's GHSA-fp6g-27w5-489j). Apps Hermes starts don't
   inherit those variables either; desktop sessions normally don't set them.
+- A PIN typed on the pairing page goes to the device it was meant for (from
+  PunkUnity). Hermes gave it to whichever request was waiting first, so a
+  second device pairing at the same moment could receive it (the same issue as
+  Sunshine's GHSA-36ff-frg7-492f). The page now lists the waiting requests with
+  their name and address and sends the PIN for the one picked (`request_id`,
+  from the new `GET /api/pin/pending`); the Game Mode console sends the one it
+  shows. Moonlight-based clients share a client ID, so a request still waiting
+  for its PIN is only replaced by a retry from the same address.
 - A game that starts Steam from a detached command (games added with Import
   Games, `setsid steam steam://rungameid/<id>`) now starts in an isolated
   session's stream (from PunkUnity). Hermes recognised Steam only when `cmd`
