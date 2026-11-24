@@ -986,7 +986,9 @@ namespace VDISPLAY {
    *
    * With another aspect ratio the virtual output's logical size is larger than
    * the target's in one direction; the extra is split between both sides
-   * rather than left beyond the right or bottom edge.
+   * rather than left beyond the right or bottom edge. Never below 0: KWin
+   * refuses a layout with a negative position, so a monitor at the origin
+   * stays at the virtual output's left or top edge.
    *
    * @param target The mirrored output (logical geometry).
    * @param mode_width The virtual output's mode width, in pixels.

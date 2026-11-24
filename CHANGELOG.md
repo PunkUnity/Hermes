@@ -137,14 +137,16 @@ run `scripts/bump-version.sh <major|minor|patch>` — it moves everything under
   the Gamescope Steam Session app reached the client cropped and off-centre.
   Hermes now scales the virtual output (0.5 in that case) so it covers the
   monitor at any stream resolution, and centres the monitor in it when the
-  shapes differ (a 20:9 phone or a 16:10 tablet over a 16:9 monitor). The other
+  shapes differ (a 20:9 phone or a 16:10 tablet over a 16:9 monitor) as far as
+  KWin allows: it refuses a layout with a negative position, so a monitor at
+  the origin is mirrored from its left or top edge. The other
   layouts name scale 1, as KWin replays a remembered scale. A Gamescope Hermes
   starts now covers the mirroring output with a borderless window kept above the
   panels instead of going fullscreen: KWin makes a window fullscreen on the
   first output under its centre, the monitor, so a 2992x1344 phone got
   Gamescope's 20:9 picture squeezed into the monitor's 16:9 and boxed on all
-  four sides. The stream now gets the whole picture, and the monitor shows its
-  middle. A resume at another resolution fits the mirror to the new mode
+  four sides. The stream now gets the whole picture, and the monitor shows the
+  part of it the mirror covers. A resume at another resolution fits the mirror to the new mode
   again; it kept the first client's scale, so a 720p client resuming after a
   2992x1344 one covered only part of the monitor.
 - A game that starts Steam from a detached command (games added with Import

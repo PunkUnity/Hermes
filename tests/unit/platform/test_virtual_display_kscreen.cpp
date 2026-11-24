@@ -681,12 +681,31 @@ TEST(KScreenMirrorPosition, AWiderStreamCentresTheMonitor) {
   EXPECT_EQ(at.y, 0);
 }
 
-TEST(KScreenMirrorPosition, ATallerStreamCentresVertically) {
+TEST(KScreenMirrorPosition, ATallerStreamOverAMonitorAtTheOriginStaysAtTheTop) {
   // A 2560x1600 tablet at 1.0 is 160 taller than a 2560x1440 monitor.
   const VDISPLAY::kscreen_output_t dp2 {"DP-2", true, true, 1, 0, 0, 2560, 1440};
   const double scale = VDISPLAY::kscreenMirrorScale(2560, 1600, 2560, 1440);
   EXPECT_DOUBLE_EQ(scale, 1.0);
   const auto at = VDISPLAY::kscreenMirrorPosition(dp2, 2560, 1600, scale);
   EXPECT_EQ(at.x, 0);
-  EXPECT_EQ(at.y, -80);
+  EXPECT_EQ(at.y, 0) << "KWin refuses a negative position";
+}
+
+TEST(KScreenMirrorPosition, NeverNegativeForAMonitorAtTheOrigin) {
+  // Haven, 2026-11-24: a 2992x1344 phone over DP-2 at 0,0. Centred, the
+  // output would sit at -323,0, and KWin refused the whole layout: "Position
+  // of enabled output Virtual-1 is negative (-323, 0)".
+  const VDISPLAY::kscreen_output_t dp2 {"DP-2", true, true, 1, 0, 0, 2560, 1440};
+  const double scale = VDISPLAY::kscreenMirrorScale(2992, 1344, 2560, 1440);
+  const auto at = VDISPLAY::kscreenMirrorPosition(dp2, 2992, 1344, scale);
+  EXPECT_EQ(at.x, 0);
+  EXPECT_EQ(at.y, 0);
+}
+
+TEST(KScreenMirrorPosition, CentresAsFarAsTheOriginAllows) {
+  // 320 either side wanted, only 100 available left of a monitor at x=100.
+  const VDISPLAY::kscreen_output_t dp2 {"DP-2", true, true, 1, 100, 0, 2560, 1440};
+  const auto at = VDISPLAY::kscreenMirrorPosition(dp2, 2400, 1080, 0.75);
+  EXPECT_EQ(at.x, 0);
+  EXPECT_EQ(at.y, 0);
 }
