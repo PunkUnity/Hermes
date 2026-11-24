@@ -345,8 +345,40 @@ TEST(PairingRecoveryTest, PinSubmissionSkipsSessionAlreadyExchangingChallenges) 
   auto &session = begin_pairing_session(std::move(initial));
   boost::property_tree::ptree tree;
   getservercert(session, tree, "1234");
-  EXPECT_FALSE(pin("5678", "Unexpected rename"));
+  EXPECT_FALSE(pin("5678", "Unexpected rename", session.request_id));
   // The PIN API must not advance/reject an unrelated in-flight challenge.
   EXPECT_EQ(session.last_phase, PAIR_PHASE::GETSERVERCERT);
   EXPECT_TRUE(cancel_pending_pairing("not-waiting-for-pin"));
+}
+
+TEST(PairingRecoveryTest, APinNeedsTheRequestItIsFor) {
+  pair_session_t initial;
+  initial.client.uniqueID = "pin-needs-request";
+  initial.request_id = "0123456789abcdef0123456789abcdef";
+  initial.async_insert_pin.salt = "ff5dc6eda99339a8a0793e216c4257c4";
+  auto &session = begin_pairing_session(std::move(initial));
+  // No ID, or another request's, never reaches this session.
+  EXPECT_FALSE(pin("1234", "", ""));
+  EXPECT_FALSE(pin("1234", "", "ffffffffffffffffffffffffffffffff"));
+  EXPECT_EQ(session.last_phase, PAIR_PHASE::NONE);
+  EXPECT_TRUE(cancel_pending_pairing("pin-needs-request"));
+}
+
+TEST(PairingRecoveryTest, ARequestNotWaitingForItsPinCanBeReplacedFromAnywhere) {
+  pair_session_t initial;
+  initial.client.uniqueID = "mid-handshake";
+  initial.address = "192.168.1.117";
+  initial.async_insert_pin.salt = "ff5dc6eda99339a8a0793e216c4257c4";
+  auto &session = begin_pairing_session(std::move(initial));
+  boost::property_tree::ptree tree;
+  getservercert(session, tree, "1234");
+  // Past the PIN, an abandoned handshake must not block the next attempt.
+  EXPECT_FALSE(pairing_request_conflicts("mid-handshake", "100.84.120.125"));
+  EXPECT_FALSE(pairing_request_conflicts("nobody-pairing", "192.168.1.5"));
+  EXPECT_TRUE(cancel_pending_pairing("mid-handshake"));
+}
+
+TEST(PairingRecoveryTest, NothingIsListedWhileNoRequestWaits) {
+  EXPECT_TRUE(pending_pair_requests().empty());
+  EXPECT_FALSE(pending_pair_client());
 }

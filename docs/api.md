@@ -35,6 +35,9 @@ See the [C++ reference](pathname:///reference/cpp/index.htm) for host internals.
 
 [Source-generated reference](pathname:///reference/cpp/http_api.htm#post-api-pin).
 
+## GET /api/pin/pending
+@copydoc confighttp::getPendingPairs()
+
 ## GET /api/apps
 
 [Source-generated reference](pathname:///reference/cpp/http_api.htm#get-api-apps).
