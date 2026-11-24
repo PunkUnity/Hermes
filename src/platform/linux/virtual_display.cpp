@@ -2541,11 +2541,14 @@ namespace VDISPLAY {
     }
     // The logical size is at least the target's; split what is left over
     // evenly on both sides, so the target sits in the middle of the stream.
+    // KWin refuses a whole layout in which an enabled output has a negative
+    // position ("Position of enabled output ... is negative"), scale and mode
+    // included, so a monitor at the origin is mirrored from its edge instead.
     const int logical_width = static_cast<int>(std::lround(mode_width / scale));
     const int logical_height = static_cast<int>(std::lround(mode_height / scale));
     return {
-      target.x - std::max(0, logical_width - target.width) / 2,
-      target.y - std::max(0, logical_height - target.height) / 2,
+      std::max(0, target.x - std::max(0, logical_width - target.width) / 2),
+      std::max(0, target.y - std::max(0, logical_height - target.height) / 2),
     };
   }
 
