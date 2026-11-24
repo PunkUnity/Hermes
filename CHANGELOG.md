@@ -163,6 +163,11 @@ run `scripts/bump-version.sh <major|minor|patch>` — it moves everything under
   advertised 01245367 instead of 01245673, so its last channels landed on the
   wrong speakers. The rotation now covers each layout's own channels (as
   Sunshine fixed in #6019).
+- The video and audio sockets no longer share one sender address while both
+  wait for a packet (from PunkUnity). A client's video and audio pings arriving
+  together could overwrite each other's address, so Hermes could send a stream
+  to the wrong port and the stream started without picture or sound. Each
+  socket now has its own (as Sunshine fixed in #6021).
 - Stopping the desktop's Steam before a session, and starting it again after a
   nested Gamescope app, works with Flatpak Steam too (from PunkUnity). Its pid
   file is in the Flatpak's home and holds a pid from inside the sandbox, so
