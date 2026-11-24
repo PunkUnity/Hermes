@@ -163,6 +163,7 @@ interface MirrorWindow {
   frameGeometry: Rect
   output: { name: string }
   fullScreenChanged: { connect: (handler: () => void) => void }
+  frameGeometryChanged: { connect: (handler: () => void) => void }
 }
 
 // Recorded on Haven (KDE Plasma 6, 2026-11-24): a 2992x1344 Hestia RS stream
@@ -177,9 +178,11 @@ function mirrorDesktop(existing: MirrorWindow[], mode = 'gamescope') {
     geometryChanged: { connect: fn => geometryHandlers.push(fn) },
   };
   const moves: MirrorWindow[] = [];
+  const screensHandlers: (() => void)[] = [];
   let onAdded: ((window: MirrorWindow) => void) | undefined;
   const workspace = {
-    screens: [monitor, target],
+    screens: [monitor, target] as { name: string }[],
+    screensChanged: { connect: (fn: () => void) => screensHandlers.push(fn) },
     windowList: () => existing,
     windowAdded: { connect: (handler: (window: MirrorWindow) => void) => { onAdded = handler; } },
     sendClientToScreen: (window: MirrorWindow, screen: MirrorScreen) => {
@@ -199,6 +202,10 @@ function mirrorDesktop(existing: MirrorWindow[], mode = 'gamescope') {
       target.geometry = geometry;
       geometryHandlers.forEach(fn => fn());
     },
+    removeTarget() {
+      workspace.screens = [monitor];
+      screensHandlers.forEach(fn => fn());
+    },
   };
 }
 
@@ -207,16 +214,23 @@ const rect = ({ x, y, width, height }: Rect): Rect => ({ x, y, width, height });
 
 function mirrorWindow(pid: number, resourceClass = 'gamescope'): MirrorWindow {
   const handlers: (() => void)[] = [];
+  const geometryHandlers: (() => void)[] = [];
   let fullScreen = true;
+  let frameGeometry: Rect = { x: 0, y: 0, width: 2560, height: 1440 };
   return {
     pid,
     resourceClass,
     normalWindow: true,
     noBorder: false,
     keepAbove: false,
-    frameGeometry: { x: 0, y: 0, width: 2560, height: 1440 },
+    get frameGeometry() { return frameGeometry; },
+    set frameGeometry(value) {
+      frameGeometry = value;
+      geometryHandlers.forEach(fn => fn());
+    },
     output: { name: 'DP-2' },
     fullScreenChanged: { connect: fn => handlers.push(fn) },
+    frameGeometryChanged: { connect: fn => geometryHandlers.push(fn) },
     get fullScreen() { return fullScreen; },
     set fullScreen(value) {
       if (value !== fullScreen) {
@@ -266,4 +280,39 @@ test('in a mirror Steam is still placed, never covered', () => {
   assert.equal(steam.output, target);
   assert.equal(steam.noBorder, false);
   assert.equal(steam.keepAbove, false);
+});
+
+test('in a mirror a covered Gamescope that KWin moves below a panel is covered again', () => {
+  // Recorded on Haven: after a resume at 1280x720 the window sat at 0,38,
+  // clear of DP-2's 38-pixel panel, instead of covering Virtual-1 at 0,0.
+  const streamed = mirrorWindow(42);
+  const { target } = mirrorDesktop([streamed]);
+  streamed.frameGeometry = { x: 0, y: 38, width: 1707, height: 960 };
+  assert.deepEqual(rect(streamed.frameGeometry), target.geometry);
+});
+
+test('in a mirror the re-covering stops if something keeps moving the window', () => {
+  const streamed = mirrorWindow(42);
+  mirrorDesktop([streamed]);
+  let moves = 0;
+  for (let i = 0; i < 50; ++i) {
+    streamed.frameGeometry = { x: 0, y: 38, width: 100, height: 100 };
+    if (streamed.frameGeometry.y === 38) {
+      break;
+    }
+    moves += 1;
+  }
+  assert.ok(moves <= 20, `covered again ${moves} times`);
+});
+
+test('in a mirror Gamescope gets plain fullscreen back when the virtual output goes', () => {
+  const streamed = mirrorWindow(42);
+  const { removeTarget } = mirrorDesktop([streamed]);
+  removeTarget();
+  assert.equal(streamed.fullScreen, true);
+  assert.equal(streamed.noBorder, false);
+  assert.equal(streamed.keepAbove, false);
+  streamed.fullScreen = false;
+  streamed.fullScreen = true;
+  assert.equal(streamed.fullScreen, true, 'not covered again once the output is gone');
 });

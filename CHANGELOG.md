@@ -144,7 +144,9 @@ run `scripts/bump-version.sh <major|minor|patch>` — it moves everything under
   first output under its centre, the monitor, so a 2992x1344 phone got
   Gamescope's 20:9 picture squeezed into the monitor's 16:9 and boxed on all
   four sides. The stream now gets the whole picture, and the monitor shows its
-  middle.
+  middle. A resume at another resolution fits the mirror to the new mode
+  again; it kept the first client's scale, so a 720p client resuming after a
+  2992x1344 one covered only part of the monitor.
 - A game that starts Steam from a detached command (games added with Import
   Games, `setsid steam steam://rungameid/<id>`) now starts in an isolated
   session's stream (from PunkUnity). Hermes recognised Steam only when `cmd`

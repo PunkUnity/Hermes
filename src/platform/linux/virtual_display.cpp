@@ -3290,6 +3290,39 @@ namespace VDISPLAY {
     }
 
     /**
+     * Fit a mirroring virtual output to the monitor again for its current mode.
+     *
+     * The scale and position depend on the mode (kscreenMirrorScale()), and a
+     * resume brings the next client's mode: at the previous client's scale a
+     * 1280x720 output covers only part of a 2560x1440 monitor. Also named again
+     * when the session's mode is confirmed, as KWin replays a remembered scale.
+     */
+    static void refit_mirror(const std::string &output_name, int width, int height) {
+      const auto current = outputs();
+      const auto target = kscreenMirrorTarget(output_name, current, current);
+      if (!target) {
+        return;
+      }
+      const double scale = kscreenMirrorScale(width, height, target->width, target->height);
+      if (scale <= 0) {
+        return;
+      }
+      const auto position = kscreenMirrorPosition(*target, width, height, scale);
+      std::ostringstream command;
+      command.imbue(std::locale::classic());
+      command << "kscreen-doctor output." << output_name << ".scale." << scale << " output." << output_name
+              << ".position." << position.x << ',' << position.y;
+      if (run_layout_command(command.str())) {
+        BOOST_LOG(info) << "[VDISPLAY/KScreen] Scaling " << output_name << " by " << scale << " at " << position.x << ','
+                        << position.y << " for " << width << 'x' << height << " so it mirrors all of " << target->name
+                        << " (" << target->width << 'x' << target->height << "), centred.";
+      } else {
+        BOOST_LOG(warning) << "[VDISPLAY/KScreen] Could not fit " << output_name << " to " << target->name << " for "
+                           << width << 'x' << height << "; the mirror may show only part of it.";
+      }
+    }
+
+    /**
      * Drive this session's virtual output at @p width x @p height @ @p refresh_hz.
      *
      * Telling the kernel is only half of a mode change: KWin keeps driving the
@@ -3309,6 +3342,7 @@ namespace VDISPLAY {
       }
 
       std::string output_name;
+      bool mirror = false;
       {
         std::lock_guard<std::mutex> lock(layouts_mutex);
         const auto it = layouts.find(display_name);
@@ -3316,6 +3350,7 @@ namespace VDISPLAY {
           return false;
         }
         output_name = it->second.virtual_output;
+        mirror = it->second.mirror;
       }
       if (!safe_output_name(output_name)) {
         return false;
@@ -3327,6 +3362,9 @@ namespace VDISPLAY {
       switch (kscreenModeState(command_output("kscreen-doctor -j"), output_name, width, height, refresh_hz)) {
         case kscreen_mode_state_e::current:
           BOOST_LOG(debug) << "[VDISPLAY/KScreen] " << output_name << " is already driven at " << mode << '.';
+          if (mirror) {
+            refit_mirror(output_name, width, height);
+          }
           return true;
         case kscreen_mode_state_e::not_advertised:
           BOOST_LOG(warning) << "[VDISPLAY/KScreen] " << output_name << " does not advertise " << mode
@@ -3348,10 +3386,16 @@ namespace VDISPLAY {
         case kscreen_mode_state_e::current:
           BOOST_LOG(info) << "[VDISPLAY/KScreen] Driving " << output_name << " at " << mode
                           << " for this session.";
+          if (mirror) {
+            refit_mirror(output_name, width, height);
+          }
           return true;
         case kscreen_mode_state_e::unknown_output:
           BOOST_LOG(debug) << "[VDISPLAY/KScreen] Applied " << mode << " to " << output_name
                            << "; KWin's reply was unreadable, so it could not be confirmed.";
+          if (mirror) {
+            refit_mirror(output_name, width, height);
+          }
           return true;
         default:
           BOOST_LOG(warning) << "[VDISPLAY/KScreen] KWin accepted " << mode << " for " << output_name
