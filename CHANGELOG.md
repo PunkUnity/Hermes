@@ -145,6 +145,13 @@ run `scripts/bump-version.sh <major|minor|patch>` — it moves everything under
   Gamescope's 20:9 picture squeezed into the monitor's 16:9 and boxed on all
   four sides. The stream now gets the whole picture, and the monitor shows its
   middle.
+- Control-stream packets are checked against the bytes that arrived (from
+  PunkUnity). A packet shorter than its 2-byte type made Hermes read past it
+  and could end the process (the same bug as Sunshine's GHSA-c428-87f8-rrv5),
+  and an encrypted message whose header claimed more bytes than were received
+  was read up to 64 KB past the packet (as Wolf fixed in November). Legacy
+  (unencrypted control stream) input trusted its length the same way, a
+  negative one included. All three are now dropped with a warning.
 - A game that starts Steam from a detached command (games added with Import
   Games, `setsid steam steam://rungameid/<id>`) now starts in an isolated
   session's stream (from PunkUnity). Hermes recognised Steam only when `cmd`
