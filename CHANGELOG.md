@@ -116,6 +116,12 @@ run `scripts/bump-version.sh <major|minor|patch>` — it moves everything under
   GHSA-26q2-58j6-qmvv and GHSA-6w33-pjh7-p77c). The check runs before the
   per-client permission check, which read the packet's type first. Malformed
   packets are dropped with a warning.
+- A game that starts Steam from a detached command (games added with Import
+  Games, `setsid steam steam://rungameid/<id>`) now starts in an isolated
+  session's stream (from PunkUnity). Hermes recognised Steam only when `cmd`
+  began with `steam`, so it left the desktop's Steam running; the session's
+  request went to it, and the game opened on the host's desktop and kept
+  running after the stream ended.
 - Stopping the desktop's Steam before a session, and starting it again after a
   nested Gamescope app, works with Flatpak Steam too (from PunkUnity). Its pid
   file is in the Flatpak's home and holds a pid from inside the sandbox, so
