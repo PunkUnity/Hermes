@@ -68,7 +68,18 @@ namespace platf::window_placement {
             std::find(arguments.begin(), arguments.end(), "com.valvesoftware.Steam") != arguments.end());
   }
 
-  inline std::string kwin_script(const std::string &output, const std::vector<std::string> &classes, const std::vector<std::uint32_t> &gamescope_pids) {
+  /**
+   * The KWin script that moves the streamed application's windows to @p output.
+   *
+   * @param mirror The output overlaps the monitor it mirrors. KWin gives a
+   * fullscreen window the first output under its centre, and a mirror shares
+   * its centre with the monitor, so a fullscreen Gamescope always lands on the
+   * monitor and reaches the stream at the monitor's shape. In a mirror the
+   * launched Gamescope covers the output with a borderless window kept above
+   * the panels instead. Gamescope exits with the session, so nothing is left
+   * borderless on the desktop afterwards; Steam is never covered.
+   */
+  inline std::string kwin_script(const std::string &output, const std::vector<std::string> &classes, const std::vector<std::uint32_t> &gamescope_pids, bool mirror = false) {
     // Both names become JavaScript string literals. Restrict them before
     // interpolation, including when this helper is called outside VDISPLAY.
     if (output.empty() || output.size() > 64 || classes.empty() ||
@@ -95,8 +106,41 @@ namespace platf::window_placement {
            "const output = workspace.screens.find(screen => screen.name === \"" + output + "\");\n"
            "const classes = [" + class_list + "];\n"
            "const gamescopePids = [" + pid_list + "];\n"
+           "const mirror = " + (mirror ? "true" : "false") + ";\n"
+           "const covered = [];\n"
+           "// In a mirror the output overlaps the monitor and shares its centre, and\n"
+           "// KWin makes a window fullscreen on the first output under its centre:\n"
+           "// the monitor. Cover the output with the window instead.\n"
+           "function cover(window) {\n"
+           "  const area = output.geometry;\n"
+           "  const frame = window.frameGeometry;\n"
+           "  if (!window.fullScreen && window.noBorder && window.keepAbove && frame.x === area.x && frame.y === area.y &&\n"
+           "      frame.width === area.width && frame.height === area.height) {\n"
+           "    return;\n"
+           "  }\n"
+           "  window.fullScreen = false;\n"
+           "  window.noBorder = true;\n"
+           "  window.keepAbove = true;\n"
+           "  window.frameGeometry = {x: area.x, y: area.y, width: area.width, height: area.height};\n"
+           "  if (!covered.includes(window)) {\n"
+           "    covered.push(window);\n"
+           "    if (window.closed) {\n"
+           "      window.closed.connect(() => covered.splice(covered.indexOf(window), 1));\n"
+           "    }\n"
+           "  }\n"
+           "}\n"
+           "if (mirror && output && output.geometryChanged) {\n"
+           "  output.geometryChanged.connect(() => covered.slice().forEach(cover));\n"
+           "}\n"
            "function place(window) {\n"
-           "  if (!output || !window.normalWindow || !classes.includes(window.resourceClass) || window.output === output) {\n"
+           "  if (!output || !window.normalWindow || !classes.includes(window.resourceClass)) {\n"
+           "    return;\n"
+           "  }\n"
+           "  if (mirror && window.resourceClass === \"gamescope\" && gamescopePids.includes(window.pid)) {\n"
+           "    cover(window);\n"
+           "    return;\n"
+           "  }\n"
+           "  if (window.output === output) {\n"
            "    return;\n"
            "  }\n"
            "  // Other Gamescope instances belong to the local desktop. The shipped\n"

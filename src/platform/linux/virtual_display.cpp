@@ -2759,6 +2759,8 @@ namespace VDISPLAY {
       std::string virtual_output;
       bool physical_output_disabled {false};
       bool preserve_physical_outputs {false};
+      /// The virtual output overlaps the monitor it mirrors (mirror layout).
+      bool mirror {false};
       bool restore_pending {false};
       bool release_requested {false};
     };
@@ -3273,6 +3275,7 @@ namespace VDISPLAY {
         .virtual_output = virtual_output,
         .physical_output_disabled = false,
         .preserve_physical_outputs = layout == virtual_display_layout_e::detached,
+        .mirror = layout == virtual_display_layout_e::mirror,
       };
       BOOST_LOG(info) << "[VDISPLAY/KScreen] Enabled " << backend_label << " output " << virtual_output
                       << (layout == virtual_display_layout_e::detached ?
@@ -3973,6 +3976,7 @@ namespace VDISPLAY {
 
     static void place_windows(const std::string &display_name, const std::vector<std::string> &classes, const std::vector<std::uint32_t> &gamescope_pids) {
       std::string output;
+      bool mirror = false;
       {
         std::lock_guard<std::mutex> lock(layouts_mutex);
         const auto it = layouts.find(display_name);
@@ -3980,11 +3984,12 @@ namespace VDISPLAY {
           return;
         }
         output = it->second.virtual_output;
+        mirror = it->second.mirror;
       }
       if (!safe_output_name(output) || classes.empty()) {
         return;
       }
-      const auto contents = platf::window_placement::kwin_script(output, classes, gamescope_pids);
+      const auto contents = platf::window_placement::kwin_script(output, classes, gamescope_pids, mirror);
       if (contents.empty()) {
         return;
       }
