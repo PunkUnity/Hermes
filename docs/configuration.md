@@ -2057,11 +2057,12 @@ The fixes are in upstream commits `3cfb4fb78d5ac04ed0dadc8dd842fc9e448916db` and
   <tbody>
     <tr>
         <td>Description</td>
-        <td colSpan={2}>Set the address family that Hermes will use.</td>
+        <td colSpan={2}>Set the address family that Hermes will use. With `both`, every port listens on IPv4 and
+IPv6 (dual-stack `::`), and Hestia clients prefer IPv6 where the network has it.</td>
     </tr>
     <tr>
         <td>Default</td>
-        <td colSpan={2}>`ipv4`</td>
+        <td colSpan={2}>`both`</td>
     </tr>
     <tr>
         <td>Example</td>
@@ -2113,7 +2114,17 @@ Changing this value will offset other ports as shown in config UI.
   <tbody>
     <tr>
         <td>Description</td>
-        <td colSpan={2}>The origin of the remote endpoint address that is not denied for HTTPS Web UI.</td>
+        <td colSpan={2}>
+
+The origin of the remote endpoint address that is not denied for HTTPS Web UI.
+
+The LAN is the private, shared and link-local ranges (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`,
+`100.64.0.0/10`, `169.254.0.0/16`, `fc00::/7`, `fe80::/64`) and any address on a subnet one of the host's
+interfaces is attached to, such as an IPv6 global address of the home network. A VPN that gives the host a
+single-address route (`/32`, `/128`, as Tailscale does) adds nothing to it. The same rule picks between
+`lan_encryption_mode` and `wan_encryption_mode`.
+
+    </td>
     </tr>
     <tr>
         <td>Default</td>
@@ -2166,7 +2177,8 @@ Changing this value will offset other ports as shown in config UI.
         <td>Description</td>
         <td colSpan={2}>
 
-This determines when encryption will be used when streaming over your local network.
+This determines when encryption will be used when streaming over your local network (what counts as local
+is described under `origin_web_ui_allowed`).
 
 :::warning
 
@@ -2436,6 +2448,76 @@ but at the cost of increasing bandwidth usage.
     <tr>
         <td>Example</td>
         <td colSpan={2}>`fec_percentage = 20`</td>
+    </tr>
+  </tbody>
+</table>
+
+### adaptive_fec
+
+<table>
+  <tbody>
+    <tr>
+        <td>Description</td>
+        <td colSpan={2}>
+
+Size FEC parity from what the client reports losing instead of using `fec_percentage` for every
+frame. Clients send `SS_FRAME_FEC_STATUS` for each block that needed parity or was dropped; the
+host keeps the worst of the last ten seconds and asks for the smallest redundancy that leaves a
+block unrecoverable less than 0.1% of the time.
+
+A lossy second raises parity as soon as it is counted; lowering waits five seconds, so a single
+clean second does not start a sawtooth. Only the client's own reports count as evidence: until
+the first report arrives `fec_percentage` stands as configured, and the first trustworthy second
+of reports starts the five-second hold. A second counts once it covers at least three quarters
+of a second, because jitter makes a rollover land slightly early; while no trustworthy second is
+in the window the last value stands, since a stall is not a clean link.
+
+:::warning
+
+Parity is counted against the stream's bitrate budget only at the configured `fec_percentage`,
+so adaptive parity may briefly exceed it under heavy loss.
+
+:::
+
+    </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colSpan={2}>`enabled`</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colSpan={2}>`adaptive_fec = enabled`</td>
+    </tr>
+  </tbody>
+</table>
+
+### adaptive_fec_max_percentage
+
+<table>
+  <tbody>
+    <tr>
+        <td>Description</td>
+        <td colSpan={2}>
+
+Highest percentage adaptive FEC may ask for. Keep this at or below what the link can afford:
+parity is bandwidth, and a client already losing packets has none to spare. A `fec_percentage`
+above it applies until the client's first report; turn `adaptive_fec` off to keep it for the
+whole stream.
+
+    </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colSpan={2}>`50`</td>
+    </tr>
+    <tr>
+        <td>Range</td>
+        <td colSpan={2}>1-50</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colSpan={2}>`adaptive_fec_max_percentage = 50`</td>
     </tr>
   </tbody>
 </table>
