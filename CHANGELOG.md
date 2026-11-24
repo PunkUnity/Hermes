@@ -123,6 +123,12 @@ run `scripts/bump-version.sh <major|minor|patch>` — it moves everything under
   GHSA-26q2-58j6-qmvv and GHSA-6w33-pjh7-p77c). The check runs before the
   per-client permission check, which read the packet's type first. Malformed
   packets are dropped with a warning.
+- Hermes removes the Qt, GTK, GIO and GdkPixbuf module-path variables from its
+  environment at startup when it runs with its file capability (from
+  PunkUnity). The tray initializes Qt, which loads plugins from those paths,
+  so whoever set Hermes' environment could run code with CAP_SYS_ADMIN (the
+  same issue as Sunshine's GHSA-fp6g-27w5-489j). Apps Hermes starts don't
+  inherit those variables either; desktop sessions normally don't set them.
 - Stopping the desktop's Steam before a session, and starting it again after a
   nested Gamescope app, works with Flatpak Steam too (from PunkUnity). Its pid
   file is in the Flatpak's home and holds a pid from inside the sandbox, so
