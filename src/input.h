@@ -5,7 +5,9 @@
 #pragma once
 
 // standard includes
+#include <cstdint>
 #include <functional>
+#include <span>
 
 // local includes
 #include "platform/common.h"
@@ -36,6 +38,17 @@ namespace input {
     const std::string &wayland_socket = {},
     const std::string &client_id = {}
   );
+
+  /**
+   * @brief Check an input packet's sizes before it is read as a structure.
+   *
+   * The header's size field and every fixed-size packet's structure must fit
+   * in the bytes received, and the size must be the structure's own; text
+   * packets may carry at most UTF8_TEXT_EVENT_MAX_COUNT bytes.
+   * @param packet The packet as received, starting with its header.
+   * @return Whether the packet can be queued.
+   */
+  bool is_valid_packet(std::span<const std::uint8_t> packet);
 
 #ifdef HERMES_TESTS
   /**
