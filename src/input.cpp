@@ -12,7 +12,9 @@ extern "C" {
 #include <bitset>
 #include <chrono>
 #include <cmath>
+#include <cstring>
 #include <list>
+#include <span>
 #include <stdexcept>
 #include <thread>
 #include <unordered_map>
@@ -1677,6 +1679,74 @@ namespace input {
     }
   }
 
+  namespace {
+    /// A fixed-size packet: its declared size (after the size field) must be
+    /// the structure's, and that many bytes must have arrived.
+    template<typename Packet>
+    bool valid_fixed_packet(std::span<const std::uint8_t> packet, std::uint32_t declared_size) {
+      constexpr auto expected_size = static_cast<std::uint32_t>(sizeof(Packet) - sizeof(std::uint32_t));
+      return declared_size == expected_size && packet.size() >= sizeof(Packet);
+    }
+
+    bool valid_packet(std::span<const std::uint8_t> packet, NV_INPUT_HEADER *parsed_header) {
+      if (packet.size() < sizeof(NV_INPUT_HEADER)) {
+        return false;
+      }
+
+      NV_INPUT_HEADER header {};
+      std::memcpy(&header, packet.data(), sizeof(header));
+      if (parsed_header) {
+        *parsed_header = header;
+      }
+
+      const auto declared_size = util::endian::big(header.size);
+      if (declared_size < sizeof(header.magic) || declared_size > packet.size() - sizeof(header.size)) {
+        return false;
+      }
+
+      switch (util::endian::little(header.magic)) {
+        case MOUSE_MOVE_REL_MAGIC_GEN5:
+          return valid_fixed_packet<NV_REL_MOUSE_MOVE_PACKET>(packet, declared_size);
+        case MOUSE_MOVE_ABS_MAGIC:
+          return valid_fixed_packet<NV_ABS_MOUSE_MOVE_PACKET>(packet, declared_size);
+        case MOUSE_BUTTON_DOWN_EVENT_MAGIC_GEN5:
+        case MOUSE_BUTTON_UP_EVENT_MAGIC_GEN5:
+          return valid_fixed_packet<NV_MOUSE_BUTTON_PACKET>(packet, declared_size);
+        case SCROLL_MAGIC_GEN5:
+          return valid_fixed_packet<NV_SCROLL_PACKET>(packet, declared_size);
+        case SS_HSCROLL_MAGIC:
+          return valid_fixed_packet<SS_HSCROLL_PACKET>(packet, declared_size);
+        case KEY_DOWN_EVENT_MAGIC:
+        case KEY_UP_EVENT_MAGIC:
+          return valid_fixed_packet<NV_KEYBOARD_PACKET>(packet, declared_size);
+        case UTF8_TEXT_EVENT_MAGIC:
+          // Variable length: the text after the magic, at most one packet's worth.
+          return declared_size - sizeof(header.magic) <= UTF8_TEXT_EVENT_MAX_COUNT;
+        case MULTI_CONTROLLER_MAGIC_GEN5:
+          return valid_fixed_packet<NV_MULTI_CONTROLLER_PACKET>(packet, declared_size);
+        case SS_TOUCH_MAGIC:
+          return valid_fixed_packet<SS_TOUCH_PACKET>(packet, declared_size);
+        case SS_PEN_MAGIC:
+          return valid_fixed_packet<SS_PEN_PACKET>(packet, declared_size);
+        case SS_CONTROLLER_ARRIVAL_MAGIC:
+          return valid_fixed_packet<SS_CONTROLLER_ARRIVAL_PACKET>(packet, declared_size);
+        case SS_CONTROLLER_TOUCH_MAGIC:
+          return valid_fixed_packet<SS_CONTROLLER_TOUCH_PACKET>(packet, declared_size);
+        case SS_CONTROLLER_MOTION_MAGIC:
+          return valid_fixed_packet<SS_CONTROLLER_MOTION_PACKET>(packet, declared_size);
+        case SS_CONTROLLER_BATTERY_MAGIC:
+          return valid_fixed_packet<SS_CONTROLLER_BATTERY_PACKET>(packet, declared_size);
+        default:
+          // Unknown types are never read as a structure: the dispatch ignores them.
+          return true;
+      }
+    }
+  }  // namespace
+
+  bool is_valid_packet(std::span<const std::uint8_t> packet) {
+    return valid_packet(packet, nullptr);
+  }
+
   /**
    * @brief Called on the control stream thread to queue an input message.
    * @param input The input context pointer.
@@ -1688,13 +1758,24 @@ namespace input {
       return;
     }
 
+    // Everything after this reads the packet as the structure its magic
+    // names, and batching writes into it, so its sizes are checked first.
+    NV_INPUT_HEADER header {};
+    if (!valid_packet(input_data, &header)) {
+      if (input_data.size() >= sizeof(header)) {
+        BOOST_LOG(warning) << "Dropping a malformed input packet of type ["sv << util::hex(util::endian::little(header.magic)).to_string_view()
+                           << "]: declared size "sv << util::endian::big(header.size) << ", received "sv << input_data.size();
+      } else {
+        BOOST_LOG(warning) << "Dropping a malformed input packet of "sv << input_data.size() << " bytes"sv;
+      }
+      return;
+    }
+
     // Have some input permission
     // Otherwise have all input permission
     if ((permission & crypto::PERM::_all_inputs) != crypto::PERM::_all_inputs) {
-      PNV_INPUT_HEADER payload = (PNV_INPUT_HEADER)input_data.data();
-
       // Check permission
-      switch (util::endian::little(payload->magic)) {
+      switch (util::endian::little(header.magic)) {
         case MULTI_CONTROLLER_MAGIC_GEN5:
         case SS_CONTROLLER_ARRIVAL_MAGIC:
         case SS_CONTROLLER_TOUCH_MAGIC:
