@@ -168,6 +168,12 @@ run `scripts/bump-version.sh <major|minor|patch>` — it moves everything under
   together could overwrite each other's address, so Hermes could send a stream
   to the wrong port and the stream started without picture or sound. Each
   socket now has its own (as Sunshine fixed in #6021).
+- Surround audio keeps its channel order for clients that send their own
+  channel mapping (from PunkUnity). Hermes gave PulseAudio that mapping as the
+  capture layout, so PulseAudio reordered the samples, and the encoder then
+  applied the same mapping that the client undoes, leaving them permuted
+  (webOS Moonlight's 0,1,4,5,2,3, for one). Capture now always uses the
+  canonical layout, as Sunshine fixed in #5743.
 - Stopping the desktop's Steam before a session, and starting it again after a
   nested Gamescope app, works with Flatpak Steam too (from PunkUnity). Its pid
   file is in the Flatpak's home and holds a pid from inside the sandbox, so
