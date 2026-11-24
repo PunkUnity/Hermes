@@ -143,6 +143,14 @@ run `scripts/bump-version.sh <major|minor|patch>` — it moves everything under
   began with `steam`, so it left the desktop's Steam running; the session's
   request went to it, and the game opened on the host's desktop and kept
   running after the stream ended.
+- The mirror virtual-display layout on KDE shows the whole primary monitor when
+  the stream is smaller than it (from PunkUnity). KWin mirrors by overlap, so a
+  1280x720 stream over a 2560x1440 monitor showed only its top-left quarter, and
+  the Gamescope Steam Session app reached the client cropped and off-centre.
+  Hermes now scales the virtual output (0.5 in that case) so it covers the
+  monitor at any stream resolution, and centres the monitor in it when the
+  shapes differ (a 20:9 phone or a 16:10 tablet over a 16:9 monitor). The other
+  layouts name scale 1, as KWin replays a remembered scale.
 - Stopping the desktop's Steam before a session, and starting it again after a
   nested Gamescope app, works with Flatpak Steam too (from PunkUnity). Its pid
   file is in the Flatpak's home and holds a pid from inside the sandbox, so
