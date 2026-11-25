@@ -140,7 +140,9 @@ run `scripts/bump-version.sh <major|minor|patch>` — it moves everything under
   removes the desktop's, and only a session with a uid of its own gets one
   from systemd, so Steam's runtime exited with "Can't find session bus" and
   took the session with it. Such a session now runs under `dbus-run-session`,
-  as the KWin session already did.
+  as the KWin session already did. The app also gets Gamescope's Steam mode
+  there, as a `steam` command does: auto did not count the launcher, so Big
+  Picture ran without it.
 - The mirror virtual-display layout on KDE shows the whole primary monitor when
   the stream is smaller than it (from PunkUnity). KWin mirrors by overlap, so a
   1280x720 stream over a 2560x1440 monitor showed only its top-left quarter, and
