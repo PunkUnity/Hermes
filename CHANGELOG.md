@@ -138,6 +138,18 @@ run `scripts/bump-version.sh <major|minor|patch>` — it moves everything under
   was read up to 64 KB past the packet (as Wolf fixed in November). Legacy
   (unencrypted control stream) input trusted its length the same way, a
   negative one included. All three are now dropped with a warning.
+- The Gamescope Steam Session app starts in an isolated session (from
+  PunkUnity). It failed with error 503 ("Compositor exited before scanout
+  became ready") for two reasons. Hermes stops the desktop's Steam before an
+  isolated session only when the app starts Steam, and it did not count
+  `hermes-gamescope-launch`, whose `steam -bigpicture` is inside the script.
+  And an isolated session of the Hermes user had no D-Bus session bus: Hermes
+  removes the desktop's, and only a session with a uid of its own gets one
+  from systemd, so Steam's runtime exited with "Can't find session bus" and
+  took the session with it. Such a session now runs under `dbus-run-session`,
+  as the KWin session already did. The app also gets Gamescope's Steam mode
+  there, as a `steam` command does: auto did not count the launcher, so Big
+  Picture ran without it.
 - A game that starts Steam from a detached command (games added with Import
   Games, `setsid steam steam://rungameid/<id>`) now starts in an isolated
   session's stream (from PunkUnity). Hermes recognised Steam only when `cmd`
@@ -203,6 +215,15 @@ run `scripts/bump-version.sh <major|minor|patch>` — it moves everything under
   while the control server still listed it. The control thread then encrypted
   a message for the freed session and Hermes died with SIGSEGV. The control
   thread now sends the message itself and releases the session afterwards.
+- Hermes notices when a screen layout change is not applied (from PunkUnity).
+  kscreen-doctor exits 0 whatever happened, so Hermes logged layouts as
+  applied when KWin had refused them ("applying config failed!", for example
+  for a negative position) or when kscreen-doctor had stopped at an output it
+  could not find (a waking monitor drops off the link for a moment), and its
+  fallbacks never ran. Hermes now reads kscreen-doctor's output, logs what went
+  wrong and treats the command as failed. A session layout that is not applied
+  costs only the placement: KWin enables the virtual output by itself, and the
+  stream goes on where KWin placed it.
 - On KWin, touch and pen land on the monitor being streamed ([#131], from
   PunkUnity). KWin bound new touch devices to an output of its own choosing,
   so with more than one monitor a Multi touch client often did nothing. When
@@ -304,6 +325,9 @@ run `scripts/bump-version.sh <major|minor|patch>` — it moves everything under
   that never matched and answered `00:00:00:00:00:00`, leaving that client
   without Wake-on-LAN.
 - The configuration docs give `address_family`'s real default, `both`.
+- Apps that run in an isolated KWin desktop stream to a client that asks for
+  HDR. Their capture refused the stream (`Private KWin capture requires SDR`);
+  it now sends SDR in the 10-bit stream, as Hermes does for an SDR monitor.
 
 [#95]: https://github.com/MrOz59/Hermes/pull/95
 [#99]: https://github.com/MrOz59/Hermes/pull/99
