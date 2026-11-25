@@ -64,6 +64,9 @@ snapshot() {
     [ -r "$connector/status" ] || continue
     status="$(read_file "$connector/status")"
     case "$connector" in *Writeback*) continue ;; esac
+    # Saved by the last probe; Hermes-KMS does not refresh it when an output
+    # goes off. "enabled" is live.
+    case "$connector" in *-Virtual-*) status="last-probe:$status" ;; esac
     [ "$status" = connected ] || continue
     printf '   %-22s %-10s %-9s %s\n' "$(basename "$connector")" "$status" \
       "$(read_file "$connector/enabled")" "$(read_file "$connector/dpms")"
@@ -131,7 +134,7 @@ snapshot() {
        "$( [ -d /sys/module/hermes_kms ] && echo loaded || echo 'not loaded')"
   for connector in /sys/class/drm/card*-Virtual-*; do
     [ -r "$connector/status" ] || continue
-    printf '   %-22s %-12s %s\n' "$(basename "$connector")" "$(read_file "$connector/status")" "$(read_file "$connector/enabled")"
+    printf '   %-22s %-24s %s\n' "$(basename "$connector")" "last-probe:$(read_file "$connector/status")" "$(read_file "$connector/enabled")"
   done
 }
 

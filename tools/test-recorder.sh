@@ -33,7 +33,12 @@ layout() {
   for c in /sys/class/drm/card*-*; do
     case "$c" in *Writeback*) continue ;; esac
     [ -r "$c/status" ] || continue
-    echo "connector $(basename "$c") $(cat "$c/status") $(cat "$c/enabled" 2>/dev/null) dpms=$(cat "$c/dpms" 2>/dev/null)"
+    st="$(cat "$c/status")"
+    # Hermes-KMS does not refresh a virtual connector's saved status when it
+    # turns the output off; only a program probing the card does. "enabled"
+    # is live, so trust that one for Virtual-* connectors.
+    case "$c" in *-Virtual-*) st="last-probe:$st" ;; esac
+    echo "connector $(basename "$c") $st $(cat "$c/enabled" 2>/dev/null) dpms=$(cat "$c/dpms" 2>/dev/null)"
   done
 }
 
