@@ -87,7 +87,8 @@ for s in json.load(sys.stdin):
 case "${1:-}" in
   start)
     minutes="${2:-15}"
-    systemctl --user stop hermes-test-recorder 2>/dev/null
+    systemctl --user stop hermes-test-recorder hermes-test-recorder-layout 2>/dev/null
+    systemctl --user reset-failed hermes-test-recorder hermes-test-recorder-layout 2>/dev/null
     rm -rf "$dir"; mkdir -p "$dir"
     date +%s > "$dir/start"
     bash "$here/haven-state.sh" before > "$dir/before.txt" 2>&1
