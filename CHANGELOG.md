@@ -106,6 +106,14 @@ run `scripts/bump-version.sh <major|minor|patch>` — it moves everything under
   HDR off. Hermes now connects that output with Hermes-KMS's SDR-only flag
   (uapi 15); with an older Hermes-KMS it connects the output as before and
   logs that it could not.
+- Per-app "Force this Virtual Display setting" (`force-virtual-display`).
+  Hestia's "Use Virtual Display" now does what it says: its on or off wins
+  over the app's "Create a Virtual Display" (formerly "Always create"), which
+  is the default for clients that don't choose. An app that forces its
+  setting applies it to every client, and the log says who decided
+  (`[Settings] Virtual display on for [app]: the client asked for off, but
+  forced by the app.`). The shipped Gamescope Steam Session forces it.
+  Clients without `session/prepare` behave as before.
 
 ### Changed
 - Record the modularization dependency/lifecycle baseline and enable existing
