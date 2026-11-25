@@ -99,6 +99,13 @@ run `scripts/bump-version.sh <major|minor|patch>` — it moves everything under
   gamepad, so a game reading that gamepad as well got every press twice; with
   this on, games see Steam Input's controller alone. A game run without Steam
   Input then has no controller.
+- An app that runs in an isolated session on a Hermes-KMS card (Gamescope,
+  or an isolated KWin desktop) gets an SDR monitor when the client asks for
+  SDR. The session card advertised HDR whenever Hermes-KMS was loaded with
+  `hdr_enable`, so Gamescope with Steam turned HDR on even with the client's
+  HDR off. Hermes now connects that output with Hermes-KMS's SDR-only flag
+  (uapi 15); with an older Hermes-KMS it connects the output as before and
+  logs that it could not.
 
 ### Changed
 - Record the modularization dependency/lifecycle baseline and enable existing
