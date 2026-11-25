@@ -3975,9 +3975,14 @@ fi')CLIP";
    * @brief Quit Hermes.
    * @param response The HTTP response object.
    * @param request The HTTP request object.
+   *
+   * @api_examples{/api/quit| POST| null}
    */
   void quit(resp_https_t response, req_https_t request) {
-    if (!authenticate(response, request)) {
+    // Like every other state-changing call: a form posted from another page
+    // on this host cannot send application/json without a CORS preflight,
+    // and the SameSite cookie does not stop a page on another port.
+    if (!validateContentType(response, request, "application/json") || !authenticate(response, request)) {
       return;
     }
 

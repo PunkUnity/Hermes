@@ -131,6 +131,10 @@ run `scripts/bump-version.sh <major|minor|patch>` — it moves everything under
   calls `localhost`.
 
 ### Fixed
+- `POST /api/quit` requires `Content-Type: application/json`, like every other
+  state-changing web API call, so a form posted from another page on the host
+  (another port is the same site, which the SameSite cookie allows) cannot
+  stop Hermes. The web UI already sends it.
 - The Gamescope Steam Session app starts in an isolated session (from
   PunkUnity). It failed with error 503 ("Compositor exited before scanout
   became ready") for two reasons. Hermes stops the desktop's Steam before an
