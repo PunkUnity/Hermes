@@ -646,6 +646,7 @@ TEST(KScreenRefusedLayout, AReasonOnTheLastLineWithoutANewline) {
   const auto refused = VDISPLAY::kscreenRefusedLayout("applying config failed! some reason\r");
   ASSERT_TRUE(refused.has_value());
   EXPECT_EQ(*refused, "applying config failed! some reason");
+}
 
 TEST(KScreenMirrorScale, ASmallerStreamCoversTheWholeMonitor) {
   // The reported case: a 1280x720 stream mirroring a 2560x1440 monitor showed
