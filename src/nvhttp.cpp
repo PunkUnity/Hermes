@@ -181,11 +181,11 @@ namespace nvhttp {
    * has to go and type four digits.
    */
   std::mutex pending_pair_mutex;
-  std::unordered_map<std::string, std::string> pending_pairs;
+  std::unordered_map<std::string, pending_pair_t> pending_pairs;
 
-  void set_pending_pair(const std::string &unique_id, const std::string &name) {
+  void set_pending_pair(const std::string &unique_id, pending_pair_t pending) {
     std::lock_guard lock {pending_pair_mutex};
-    pending_pairs[unique_id] = name;
+    pending_pairs[unique_id] = std::move(pending);
   }
 
   void clear_pending_pair(const std::string &unique_id) {
@@ -835,8 +835,18 @@ namespace nvhttp {
           deviceName = "Legacy Moonlight Client";
         }
 
+        const auto address = net::addr_to_normalized_string(request->remote_endpoint().address());
+        if (pairing_request_conflicts(uniqID, address)) {
+          tree.put("root.paired", 0);
+          tree.put("root.<xmlattr>.status_code", 409);
+          tree.put("root.<xmlattr>.status_message", "Another device's pairing request is waiting for its PIN");
+          return;
+        }
+
         sess.client.uniqueID = std::move(uniqID);
         sess.client.name = std::move(deviceName);
+        sess.request_id = util::hex_vec(crypto::rand(16));
+        sess.address = address;
         sess.client.cert = util::from_hex_vec(get_arg(args, "clientcert"), true);
 
         auto &new_session = begin_pairing_session(std::move(sess));
@@ -885,7 +895,7 @@ namespace nvhttp {
 #if defined HERMES_TRAY && HERMES_TRAY >= 1
           system_tray::update_tray_require_pin();
 #endif
-          set_pending_pair(new_session.client.uniqueID, new_session.client.name);
+          set_pending_pair(new_session.client.uniqueID, {new_session.request_id, new_session.client.name, new_session.address});
           new_session.async_insert_pin.response = std::move(response);
 
           fg.disable();
@@ -942,7 +952,7 @@ namespace nvhttp {
     response->close_connection_after_response = true;
   }
 
-  std::optional<std::string> pending_pair_client() {
+  std::optional<pending_pair_t> pending_pair_client() {
     std::lock_guard lock {pending_pair_mutex};
     if (pending_pairs.empty()) {
       return std::nullopt;
@@ -950,7 +960,32 @@ namespace nvhttp {
     return pending_pairs.begin()->second;
   }
 
-  bool pin(std::string pin, std::string name) {
+  std::vector<pending_pair_t> pending_pair_requests() {
+    std::lock_guard lock {pending_pair_mutex};
+    std::vector<pending_pair_t> requests;
+    requests.reserve(pending_pairs.size());
+    for (const auto &[_, pending] : pending_pairs) {
+      requests.push_back(pending);
+    }
+    return requests;
+  }
+
+  namespace {
+    /// The request is parked on its HTTP response, waiting for the PIN.
+    bool waiting_for_pin(const pair_session_t &session) {
+      const auto &response = session.async_insert_pin.response;
+      return session.last_phase == PAIR_PHASE::NONE &&
+             ((response.has_left() && response.left()) || (response.has_right() && response.right()));
+    }
+  }  // namespace
+
+  bool pairing_request_conflicts(const std::string &unique_id, const std::string &address) {
+    std::lock_guard lock {pair_session_mutex};
+    const auto it = map_id_sess.find(unique_id);
+    return it != map_id_sess.end() && waiting_for_pin(it->second) && it->second.address != address;
+  }
+
+  bool pin(std::string pin, std::string name, const std::string &request_id) {
     std::lock_guard lock {pair_session_mutex};
     pt::ptree tree;
     if (map_id_sess.empty()) {
@@ -976,13 +1011,14 @@ namespace nvhttp {
       return false;
     }
 
-    // A previous client can still be exchanging challenges. Submit the PIN
-    // only to a request actually waiting for it, not an arbitrary map entry.
-    auto pending = std::find_if(map_id_sess.begin(), map_id_sess.end(), [](const auto &entry) {
-      const auto &session = entry.second;
-      const auto &response = session.async_insert_pin.response;
-      return session.last_phase == PAIR_PHASE::NONE &&
-             ((response.has_left() && response.left()) || (response.has_right() && response.right()));
+    // The PIN goes to the request the user picked, and only while it is
+    // waiting for one: never to whichever request the map yields first, which
+    // could be another device's that arrived in the meantime.
+    if (request_id.empty()) {
+      return false;
+    }
+    auto pending = std::find_if(map_id_sess.begin(), map_id_sess.end(), [&request_id](const auto &entry) {
+      return entry.second.request_id == request_id && waiting_for_pin(entry.second);
     });
     if (pending == map_id_sess.end()) {
       return false;

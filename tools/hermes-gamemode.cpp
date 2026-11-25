@@ -544,14 +544,16 @@ namespace {
 
       const std::string pin = entered_.toStdString();
       const std::string name = pending_name_;
+      // The PIN is for the request this screen shows, not whichever arrives first.
+      const std::string request_id = pending_id_;
       // Read at submit time rather than held: the pair screen can be open
       // across a restart, and the token from before it is already gone.
       const std::string token = read_local_api_token().value_or(std::string {});
-      pin_watcher_.setFuture(QtConcurrent::run([api = api_, pin, name, token]() {
-        ApiResult result = api.post("/api/pin", {{"pin", pin}, {"name", name}}, token);
+      pin_watcher_.setFuture(QtConcurrent::run([api = api_, pin, name, request_id, token]() {
+        ApiResult result = api.post("/api/pin", {{"pin", pin}, {"name", name}, {"request_id", request_id}}, token);
         if (result.status == 401) {
           if (const auto fresh = read_local_api_token()) {
-            result = api.post("/api/pin", {{"pin", pin}, {"name", name}}, *fresh);
+            result = api.post("/api/pin", {{"pin", pin}, {"name", name}, {"request_id", request_id}}, *fresh);
           }
         }
         return result;
@@ -681,6 +683,7 @@ namespace {
 
       pending_ = body.value("pending_pair", false);
       pending_name_ = body.value("pending_pair_name", std::string {});
+      pending_id_ = body.value("pending_pair_id", std::string {});
       if (pending_) {
         pair_button_->setText(
           "Pair “" + QString::fromStdString(pending_name_.empty() ? "a device" : pending_name_) +
@@ -757,6 +760,7 @@ namespace {
     QString entered_;
     bool pending_ {false};
     std::string pending_name_;
+    std::string pending_id_;
   };
 
   /** The screen shown when there is no Hermes to talk to at all. */

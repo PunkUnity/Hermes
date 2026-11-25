@@ -161,6 +161,20 @@ namespace nvhttp {
      * @brief used as a security measure to prevent out of order calls
      */
     PAIR_PHASE last_phase = PAIR_PHASE::NONE;
+
+    /// Unguessable identifier the Web UI names when it submits this request's PIN.
+    std::string request_id = {};
+    /// Address the request came from, shown beside it so the user can tell requests apart.
+    std::string address = {};
+  };
+
+  /**
+   * @brief A pairing request waiting for a PIN, as the Web UI lists it.
+   */
+  struct pending_pair_t {
+    std::string request_id;  ///< Identifier to submit the PIN for.
+    std::string name;  ///< Device name the client reported (untrusted).
+    std::string address;  ///< Address the request came from.
   };
 
   /**
@@ -236,18 +250,39 @@ namespace nvhttp {
    * "does somebody need to type a PIN right now", not "has anyone ever tried
    * to pair".
    */
-  std::optional<std::string> pending_pair_client();
+  std::optional<pending_pair_t> pending_pair_client();
 
   /**
-   * @brief Compare the user supplied pin to the Moonlight pin.
+   * @brief Every pairing request waiting for a PIN, oldest first is not guaranteed.
+   */
+  std::vector<pending_pair_t> pending_pair_requests();
+
+  /**
+   * @brief Whether a new pairing request must wait because another device is mid-request.
+   *
+   * Moonlight-based clients send the same uniqueid, so a second request with
+   * it would replace the first. A request still waiting for its PIN is only
+   * replaced from the address it came from (the same device retrying), so
+   * nobody else on the network can swap their request in for one the user is
+   * about to approve.
+   * @param unique_id The new request's client ID.
+   * @param address The new request's address.
+   * @return `true` when the new request must be refused.
+   */
+  bool pairing_request_conflicts(const std::string &unique_id, const std::string &address);
+
+  /**
+   * @brief Submit the user's PIN to one waiting pairing request.
    * @param pin The user supplied pin.
    * @param name The user supplied name.
-   * @return `true` if the pin is correct, `false` otherwise.
+   * @param request_id The waiting request the PIN is for, from pending_pair_requests().
+   * @return `true` when the PIN was handed to that request; whether it was
+   *         right is settled by the client's challenge that follows.
    * @examples
-   * bool pin_status = nvhttp::pin("1234", "laptop");
+   * bool pin_status = nvhttp::pin("1234", "laptop", request.request_id);
    * @examples_end
    */
-  bool pin(std::string pin, std::string name);
+  bool pin(std::string pin, std::string name, const std::string &request_id);
 
   std::string request_otp(const std::string& passphrase, const std::string& deviceName);
 

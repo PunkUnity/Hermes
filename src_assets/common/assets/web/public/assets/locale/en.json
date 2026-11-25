@@ -739,6 +739,8 @@
         "pair_pending": "PIN submitted. The client must still confirm pairing. Check the client for a successful connection or an incorrect-PIN message.",
         "pair_success": "Paired successfully. Continue in your client.",
         "pair_success_check_perm": "Pair success! Please grant necessary permissions to the client manually below.",
+        "pending_choose": "Which device is this PIN for?",
+        "pending_none": "No device is waiting for a PIN. Start pairing on the device first; it appears here.",
         "pin_pairing": "PIN Pairing",
         "send": "Send",
         "warning_msg": "Make sure you have access to the client you are pairing with. This software can give total control to your computer, so be careful!",
