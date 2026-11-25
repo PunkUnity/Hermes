@@ -3563,7 +3563,9 @@ printf "evdi\\n" > /etc/modules-load.d/evdi.conf')EVDI";
 
     if (const auto pending = nvhttp::pending_pair_client(); pending) {
       output_tree["pending_pair"] = true;
-      output_tree["pending_pair_name"] = *pending;
+      output_tree["pending_pair_name"] = pending->name;
+      output_tree["pending_pair_id"] = pending->request_id;
+      output_tree["pending_pair_address"] = pending->address;
     } else {
       output_tree["pending_pair"] = false;
     }
@@ -3892,11 +3894,12 @@ fi')CLIP";
    * @code{.json}
    * {
    *   "pin": "<pin>",
-   *   "name": "Friendly Client Name"
+   *   "name": "Friendly Client Name",
+   *   "request_id": "<id from /api/pin/pending>"
    * }
    * @endcode
    *
-   * @api_examples{/api/pin| POST| {"pin":"1234","name":"My PC"}}
+   * @api_examples{/api/pin| POST| {"pin":"1234","name":"My PC","request_id":"<id>"}}
    */
   void savePin(resp_https_t response, req_https_t request) {
     if (!validateContentType(response, request, "application/json") || !authenticate(response, request)) {
@@ -3912,12 +3915,45 @@ fi')CLIP";
       nlohmann::json output_tree;
       std::string pin = input_tree.value("pin", "");
       std::string name = input_tree.value("name", "");
-      output_tree["status"] = nvhttp::pin(pin, name);
+      std::string request_id = input_tree.value("request_id", "");
+      output_tree["status"] = nvhttp::pin(pin, name, request_id);
       send_response(response, output_tree);
     } catch (std::exception &e) {
       BOOST_LOG(warning) << "SavePin: "sv << e.what();
       bad_request(response, request, e.what());
     }
+  }
+
+  /**
+   * @brief List the pairing requests waiting for a PIN.
+   * @param response The HTTP response object.
+   * @param request The HTTP request object.
+   *
+   * The PIN is submitted for one of these by its `id`, so the user picks the
+   * device they are pairing rather than whichever request arrived first.
+   * @code{.json}
+   * {
+   *   "requests": [{"id": "<32 hex>", "name": "Pixel 9 Pro XL", "address": "192.168.1.117"}]
+   * }
+   * @endcode
+   *
+   * @api_examples{/api/pin/pending| GET| null}
+   */
+  void getPendingPairs(resp_https_t response, req_https_t request) {
+    if (!authenticate(response, request)) {
+      return;
+    }
+
+    print_req(request);
+
+    nlohmann::json requests = nlohmann::json::array();
+    for (const auto &pending : nvhttp::pending_pair_requests()) {
+      requests.push_back({{"id", pending.request_id}, {"name", pending.name}, {"address", pending.address}});
+    }
+
+    nlohmann::json output_tree;
+    output_tree["requests"] = std::move(requests);
+    send_response(response, output_tree);
   }
 
   /**
@@ -4198,6 +4234,7 @@ fi')CLIP";
     server.resource["^/troubleshooting/?$"]["GET"] = getTroubleshootingPage;
     server.resource["^/api/login"]["POST"] = login;
     server.resource["^/api/pin$"]["POST"] = savePin;
+    server.resource["^/api/pin/pending$"]["GET"] = getPendingPairs;
     server.resource["^/api/otp$"]["POST"] = getOTP;
     server.resource["^/api/apps$"]["GET"] = getApps;
     server.resource["^/api/apps$"]["POST"] = saveApp;
