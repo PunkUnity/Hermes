@@ -165,8 +165,6 @@
         "virtual_display_layout_detached": "Beside the physical monitors (leave them untouched)",
         "virtual_display_layout_mirror": "Mirror (clone the primary monitor)",
         "virtual_display_layout_exclusive": "Exclusive (physical monitors off)",
-        "virtual_display_primary": "Enforce Virtual Display Primary",
-        "virtual_display_primary_desc": "Automatically set the virtual display as primary display when the app starts. Virtual display will always be set to primary when client requests to use virtual display. (Recommended to keep on) [Broken on Windows 11 24H2]",
         "wait_all": "Continue streaming until all app processes exit",
         "wait_all_desc": "This will continue streaming until all processes started by the app have terminated. When unchecked, streaming will stop when the initial app process exits, even if other app processes are still running.",
         "working_dir": "Working Directory",

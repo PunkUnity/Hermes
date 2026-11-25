@@ -104,7 +104,6 @@ namespace proc {
     bool auto_detach;
     bool wait_all;
     bool virtual_display;
-    bool virtual_display_primary;
     bool use_app_identity;
     bool per_client_app_identity;
     bool allow_client_commands;
