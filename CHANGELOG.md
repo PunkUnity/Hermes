@@ -172,6 +172,12 @@ run `scripts/bump-version.sh <major|minor|patch>` — it moves everything under
   GHSA-26q2-58j6-qmvv and GHSA-6w33-pjh7-p77c). The check runs before the
   per-client permission check, which read the packet's type first. Malformed
   packets are dropped with a warning.
+- Hermes removes the Qt, GTK, GIO and GdkPixbuf module-path variables from its
+  environment at startup when it runs with its file capability (from
+  PunkUnity). The tray initializes Qt, which loads plugins from those paths,
+  so whoever set Hermes' environment could run code with CAP_SYS_ADMIN (the
+  same issue as Sunshine's GHSA-fp6g-27w5-489j). Apps Hermes starts don't
+  inherit those variables either; desktop sessions normally don't set them.
 - A game that starts Steam from a detached command (games added with Import
   Games, `setsid steam steam://rungameid/<id>`) now starts in an isolated
   session's stream (from PunkUnity). Hermes recognised Steam only when `cmd`
