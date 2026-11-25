@@ -958,8 +958,43 @@ namespace VDISPLAY {
     int mode_height,
     int mode_refresh_hz,
     const std::map<std::string, kscreen_point_t> &positions_before = {},
-    virtual_display_layout_e layout = virtual_display_layout_e::extend
+    virtual_display_layout_e layout = virtual_display_layout_e::extend,
+    double virtual_scale = 0
   );
+
+  /**
+   * @brief The scale that makes a mirroring virtual output cover the output it mirrors.
+   *
+   * KWin mirrors by overlap: the virtual output shows the part of the desktop
+   * its logical rectangle covers. At scale 1 a 1280x720 output over a
+   * 2560x1440 monitor covers only the monitor's top-left quarter, so a
+   * fullscreen window on the monitor reaches the stream cropped and
+   * off-centre. Scaled so its logical size is at least the monitor's in both
+   * directions, it shows the whole monitor; with a different aspect ratio, the
+   * rest of its area lies beyond the monitor's right or bottom edge.
+   *
+   * @param mode_width The virtual output's mode width, in pixels.
+   * @param mode_height The virtual output's mode height, in pixels.
+   * @param target_width The mirrored output's logical width.
+   * @param target_height The mirrored output's logical height.
+   * @return The scale, rounded down to KWin's 1/120 steps; 0 when any size is
+   *         missing.
+   */
+  double kscreenMirrorScale(int mode_width, int mode_height, int target_width, int target_height);
+
+  /**
+   * @brief Where a scaled mirroring virtual output goes so the mirrored output is centred in it.
+   *
+   * With another aspect ratio the virtual output's logical size is larger than
+   * the target's in one direction; the extra is split between both sides
+   * rather than left beyond the right or bottom edge.
+   *
+   * @param target The mirrored output (logical geometry).
+   * @param mode_width The virtual output's mode width, in pixels.
+   * @param mode_height The virtual output's mode height, in pixels.
+   * @param scale The virtual output's scale, from kscreenMirrorScale().
+   */
+  kscreen_point_t kscreenMirrorPosition(const kscreen_output_t &target, int mode_width, int mode_height, double scale);
 
   /** @brief What `kscreen-doctor -j` says about a mode on one output. */
   enum class kscreen_mode_state_e {

@@ -646,4 +646,74 @@ TEST(KScreenRefusedLayout, AReasonOnTheLastLineWithoutANewline) {
   const auto refused = VDISPLAY::kscreenRefusedLayout("applying config failed! some reason\r");
   ASSERT_TRUE(refused.has_value());
   EXPECT_EQ(*refused, "applying config failed! some reason");
+
+TEST(KScreenMirrorScale, ASmallerStreamCoversTheWholeMonitor) {
+  // The reported case: a 1280x720 stream mirroring a 2560x1440 monitor showed
+  // its top-left quarter, so a fullscreen Gamescope reached the client cropped
+  // and off-centre.
+  EXPECT_DOUBLE_EQ(VDISPLAY::kscreenMirrorScale(1280, 720, 2560, 1440), 0.5);
+  EXPECT_DOUBLE_EQ(VDISPLAY::kscreenMirrorScale(2560, 1440, 2560, 1440), 1.0);
+  EXPECT_DOUBLE_EQ(VDISPLAY::kscreenMirrorScale(1920, 1080, 2560, 1440), 0.75);
+}
+
+TEST(KScreenMirrorScale, AnotherAspectRatioStillCoversBothDirections) {
+  // A phone-shaped stream: the logical size reaches the monitor's height, and
+  // its extra width lies beyond the monitor's right edge.
+  const double scale = VDISPLAY::kscreenMirrorScale(2400, 1080, 2560, 1440);
+  EXPECT_DOUBLE_EQ(scale, 0.75);
+  EXPECT_GE(2400 / scale, 2560);
+  EXPECT_GE(1080 / scale, 1440);
+}
+
+TEST(KScreenMirrorScale, RoundsDownToKWinsSteps) {
+  // 854/2560 is 0.3336...: 40/120 keeps the logical width at least 2560.
+  const double scale = VDISPLAY::kscreenMirrorScale(854, 480, 2560, 1440);
+  EXPECT_DOUBLE_EQ(scale, 40.0 / 120.0);
+  EXPECT_GE(854 / scale, 2560);
+  EXPECT_GE(480 / scale, 1440);
+}
+
+TEST(KScreenMirrorScale, NoSizeNoScale) {
+  EXPECT_EQ(VDISPLAY::kscreenMirrorScale(0, 720, 2560, 1440), 0);
+  EXPECT_EQ(VDISPLAY::kscreenMirrorScale(1280, 720, 2560, 0), 0);
+}
+
+TEST(KScreenLayout, NamesTheVirtualOutputsScaleWhenGivenOne) {
+  EXPECT_EQ(
+    VDISPLAY::buildKScreenLayoutCommand("Virtual-1", kSinglePhysical, 0, 0, 1280, 720, 60, {}, VDISPLAY::virtual_display_layout_e::mirror, 0.5),
+    "kscreen-doctor"
+    " output.DP-2.enable output.DP-2.priority.1"
+    " output.Virtual-1.enable output.Virtual-1.priority.2"
+    " output.Virtual-1.position.0,0"
+    " output.Virtual-1.mode.1280x720@60"
+    " output.Virtual-1.scale.0.5"
+  );
+  const auto unscaled = VDISPLAY::buildKScreenLayoutCommand("Virtual-1", kSinglePhysical, 2560, 0, 1280, 720, 60, {}, VDISPLAY::virtual_display_layout_e::extend, 1);
+  EXPECT_NE(unscaled.find(" output.Virtual-1.scale.1"), std::string::npos);
+  EXPECT_EQ(unscaled.find("scale.1."), std::string::npos);
+}
+
+TEST(KScreenMirrorPosition, TheSameShapeSitsOnTheMonitor) {
+  const VDISPLAY::kscreen_output_t dp2 {"DP-2", true, true, 1, 0, 0, 2560, 1440};
+  const auto at = VDISPLAY::kscreenMirrorPosition(dp2, 1280, 720, 0.5);
+  EXPECT_EQ(at.x, 0);
+  EXPECT_EQ(at.y, 0);
+}
+
+TEST(KScreenMirrorPosition, AWiderStreamCentresTheMonitor) {
+  // 2400x1080 at 0.75 is 3200x1440 logical: 320 either side of a 2560 monitor.
+  const VDISPLAY::kscreen_output_t dp2 {"DP-2", true, true, 1, 1920, 0, 2560, 1440};
+  const auto at = VDISPLAY::kscreenMirrorPosition(dp2, 2400, 1080, 0.75);
+  EXPECT_EQ(at.x, 1920 - 320);
+  EXPECT_EQ(at.y, 0);
+}
+
+TEST(KScreenMirrorPosition, ATallerStreamCentresVertically) {
+  // A 2560x1600 tablet at 1.0 is 160 taller than a 2560x1440 monitor.
+  const VDISPLAY::kscreen_output_t dp2 {"DP-2", true, true, 1, 0, 0, 2560, 1440};
+  const double scale = VDISPLAY::kscreenMirrorScale(2560, 1600, 2560, 1440);
+  EXPECT_DOUBLE_EQ(scale, 1.0);
+  const auto at = VDISPLAY::kscreenMirrorPosition(dp2, 2560, 1600, scale);
+  EXPECT_EQ(at.x, 0);
+  EXPECT_EQ(at.y, -80);
 }

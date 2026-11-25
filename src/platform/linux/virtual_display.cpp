@@ -2459,7 +2459,8 @@ namespace VDISPLAY {
     int mode_height,
     int mode_refresh_hz,
     const std::map<std::string, kscreen_point_t> &positions_before,
-    virtual_display_layout_e layout
+    virtual_display_layout_e layout,
+    double virtual_scale
   ) {
     if (!safe_output_name(virtual_output)) {
       // Every caller reads this name back from the compositor, which has no
@@ -2524,7 +2525,38 @@ namespace VDISPLAY {
                  '@' + std::to_string(mode_refresh_hz);
     }
 
+    if (virtual_scale > 0) {
+      std::ostringstream scale;
+      scale.imbue(std::locale::classic());
+      scale << virtual_scale;
+      command += " output." + virtual_output + ".scale." + scale.str();
+    }
+
     return command;
+  }
+
+  kscreen_point_t kscreenMirrorPosition(const kscreen_output_t &target, int mode_width, int mode_height, double scale) {
+    if (scale <= 0) {
+      return {target.x, target.y};
+    }
+    // The logical size is at least the target's; split what is left over
+    // evenly on both sides, so the target sits in the middle of the stream.
+    const int logical_width = static_cast<int>(std::lround(mode_width / scale));
+    const int logical_height = static_cast<int>(std::lround(mode_height / scale));
+    return {
+      target.x - std::max(0, logical_width - target.width) / 2,
+      target.y - std::max(0, logical_height - target.height) / 2,
+    };
+  }
+
+  double kscreenMirrorScale(int mode_width, int mode_height, int target_width, int target_height) {
+    if (mode_width <= 0 || mode_height <= 0 || target_width <= 0 || target_height <= 0) {
+      return 0;
+    }
+    const double fit = std::min(static_cast<double>(mode_width) / target_width, static_cast<double>(mode_height) / target_height);
+    // KWin stores scales in 1/120 steps (wp_fractional_scale). Rounding down
+    // keeps the logical size at least the target's.
+    return std::max(1.0, std::floor(fit * 120.0)) / 120.0;
   }
 
   kscreen_point_t kscreenVirtualOutputPosition(
@@ -2744,6 +2776,8 @@ namespace VDISPLAY {
       std::string virtual_output;
       bool physical_output_disabled {false};
       bool preserve_physical_outputs {false};
+      /// The virtual output overlaps the monitor it mirrors (mirror layout).
+      bool mirror {false};
       bool restore_pending {false};
       bool release_requested {false};
     };
@@ -3008,6 +3042,37 @@ namespace VDISPLAY {
     }
 
     /**
+     * The output a mirroring virtual output overlaps: the primary (KScreen
+     * priority 1), else the first enabled one - where
+     * kscreenVirtualOutputPosition() anchors it. Read from the pre-session
+     * layout first, as the position is.
+     */
+    static std::optional<output_t> kscreenMirrorTarget(
+      const std::string &virtual_output,
+      const std::vector<output_t> &before,
+      const std::vector<output_t> &current
+    ) {
+      for (const auto *layout : {&before, &current}) {
+        std::optional<output_t> first;
+        for (const auto &output : *layout) {
+          if (output.name == virtual_output || !output.connected || !output.enabled) {
+            continue;
+          }
+          if (output.priority == 1) {
+            return output;
+          }
+          if (!first) {
+            first = output;
+          }
+        }
+        if (first) {
+          return first;
+        }
+      }
+      return std::nullopt;
+    }
+
+    /**
      * Reapply the outputs that were enabled immediately before the virtual
      * connector appeared. KWin stores a setup for each exact output
      * combination; an exclusive streaming setup can therefore be replayed on
@@ -3028,8 +3093,8 @@ namespace VDISPLAY {
     ) {
       const auto current = outputs();
       const auto position = kscreenVirtualOutputPosition(virtual_output, before, current, layout);
-      const int target_x = position.x;
-      const int target_y = position.y;
+      int target_x = position.x;
+      int target_y = position.y;
 
       std::map<std::string, kscreen_point_t> positions_before;
       for (const auto &output : before) {
@@ -3039,16 +3104,66 @@ namespace VDISPLAY {
       }
 
       const bool has_mode = mode_width > 0 && mode_height > 0 && mode_refresh_hz > 0;
+
+      // KWin remembers an output's scale and replays it the next time the
+      // connector appears, so every layout names one: the fitted scale for a
+      // mirror, 1 otherwise, which is what the virtual output had before
+      // Hermes set any.
+      double scale = 1;
+      if (layout == virtual_display_layout_e::mirror && has_mode) {
+        if (const auto target = kscreenMirrorTarget(virtual_output, before, current)) {
+          scale = kscreenMirrorScale(mode_width, mode_height, target->width, target->height);
+          if (scale <= 0) {
+            scale = 1;
+          } else {
+            const auto centred = kscreenMirrorPosition(*target, mode_width, mode_height, scale);
+            target_x = centred.x;
+            target_y = centred.y;
+            BOOST_LOG(info) << "[VDISPLAY/KScreen] Scaling " << virtual_output << " by " << scale << " at "
+                            << target_x << ',' << target_y << " so it mirrors all of " << target->name << " ("
+                            << target->width << 'x' << target->height << "), centred.";
+          }
+        }
+      }
+
       const auto command = buildKScreenLayoutCommand(
-        virtual_output, enabled_before, target_x, target_y, mode_width, mode_height, mode_refresh_hz,
-        positions_before, layout);
+        virtual_output,
+        enabled_before,
+        target_x,
+        target_y,
+        mode_width,
+        mode_height,
+        mode_refresh_hz,
+        positions_before,
+        layout,
+        scale
+      );
       if (command.empty()) {
         BOOST_LOG(warning) << "[VDISPLAY/KScreen] Refusing to build a layout around output name "
                            << virtual_output;
         return false;
       }
 
-      if (!run_layout_command(command)) {
+      // A scale KWin refuses costs only the scale: keep the mode.
+      bool applied = run_layout_command(command);
+      if (!applied && scale != 1 &&
+          run_layout_command(buildKScreenLayoutCommand(
+            virtual_output,
+            enabled_before,
+            target_x,
+            target_y,
+            mode_width,
+            mode_height,
+            mode_refresh_hz,
+            positions_before,
+            layout,
+            1
+          ))) {
+        BOOST_LOG(warning) << "[VDISPLAY/KScreen] KWin rejected scale " << scale << " for " << virtual_output
+                           << "; the mirror shows only the top-left part of the primary output.";
+        applied = true;
+      }
+      if (!applied) {
         // A mode KWin refuses must not cost us the rest of the layout: the
         // output still has to be enabled and placed or there is nothing to
         // capture at all. Retry without it, and say what the session lost
@@ -3183,6 +3298,7 @@ namespace VDISPLAY {
         .virtual_output = virtual_output,
         .physical_output_disabled = false,
         .preserve_physical_outputs = layout == virtual_display_layout_e::detached,
+        .mirror = layout == virtual_display_layout_e::mirror,
       };
       BOOST_LOG(info) << "[VDISPLAY/KScreen] Enabled " << backend_label << " output " << virtual_output
                       << (layout == virtual_display_layout_e::detached ?
@@ -3194,6 +3310,39 @@ namespace VDISPLAY {
     static bool is_active(const std::string &display_name) {
       std::lock_guard<std::mutex> lock(layouts_mutex);
       return layouts.find(display_name) != layouts.end();
+    }
+
+    /**
+     * Fit a mirroring virtual output to the monitor again for its current mode.
+     *
+     * The scale and position depend on the mode (kscreenMirrorScale()), and a
+     * resume brings the next client's mode: at the previous client's scale a
+     * 1280x720 output covers only part of a 2560x1440 monitor. Also named again
+     * when the session's mode is confirmed, as KWin replays a remembered scale.
+     */
+    static void refit_mirror(const std::string &output_name, int width, int height) {
+      const auto current = outputs();
+      const auto target = kscreenMirrorTarget(output_name, current, current);
+      if (!target) {
+        return;
+      }
+      const double scale = kscreenMirrorScale(width, height, target->width, target->height);
+      if (scale <= 0) {
+        return;
+      }
+      const auto position = kscreenMirrorPosition(*target, width, height, scale);
+      std::ostringstream command;
+      command.imbue(std::locale::classic());
+      command << "kscreen-doctor output." << output_name << ".scale." << scale << " output." << output_name
+              << ".position." << position.x << ',' << position.y;
+      if (run_layout_command(command.str())) {
+        BOOST_LOG(info) << "[VDISPLAY/KScreen] Scaling " << output_name << " by " << scale << " at " << position.x << ','
+                        << position.y << " for " << width << 'x' << height << " so it mirrors all of " << target->name
+                        << " (" << target->width << 'x' << target->height << "), centred.";
+      } else {
+        BOOST_LOG(warning) << "[VDISPLAY/KScreen] Could not fit " << output_name << " to " << target->name << " for "
+                           << width << 'x' << height << "; the mirror may show only part of it.";
+      }
     }
 
     /**
@@ -3216,6 +3365,7 @@ namespace VDISPLAY {
       }
 
       std::string output_name;
+      bool mirror = false;
       {
         std::lock_guard<std::mutex> lock(layouts_mutex);
         const auto it = layouts.find(display_name);
@@ -3223,6 +3373,7 @@ namespace VDISPLAY {
           return false;
         }
         output_name = it->second.virtual_output;
+        mirror = it->second.mirror;
       }
       if (!safe_output_name(output_name)) {
         return false;
@@ -3234,6 +3385,9 @@ namespace VDISPLAY {
       switch (kscreenModeState(command_output("kscreen-doctor -j"), output_name, width, height, refresh_hz)) {
         case kscreen_mode_state_e::current:
           BOOST_LOG(debug) << "[VDISPLAY/KScreen] " << output_name << " is already driven at " << mode << '.';
+          if (mirror) {
+            refit_mirror(output_name, width, height);
+          }
           return true;
         case kscreen_mode_state_e::not_advertised:
           BOOST_LOG(warning) << "[VDISPLAY/KScreen] " << output_name << " does not advertise " << mode
@@ -3255,10 +3409,16 @@ namespace VDISPLAY {
         case kscreen_mode_state_e::current:
           BOOST_LOG(info) << "[VDISPLAY/KScreen] Driving " << output_name << " at " << mode
                           << " for this session.";
+          if (mirror) {
+            refit_mirror(output_name, width, height);
+          }
           return true;
         case kscreen_mode_state_e::unknown_output:
           BOOST_LOG(debug) << "[VDISPLAY/KScreen] Applied " << mode << " to " << output_name
                            << "; KWin's reply was unreadable, so it could not be confirmed.";
+          if (mirror) {
+            refit_mirror(output_name, width, height);
+          }
           return true;
         default:
           BOOST_LOG(warning) << "[VDISPLAY/KScreen] KWin accepted " << mode << " for " << output_name
@@ -3883,6 +4043,7 @@ namespace VDISPLAY {
 
     static void place_windows(const std::string &display_name, const std::vector<std::string> &classes, const std::vector<std::uint32_t> &gamescope_pids) {
       std::string output;
+      bool mirror = false;
       {
         std::lock_guard<std::mutex> lock(layouts_mutex);
         const auto it = layouts.find(display_name);
@@ -3890,11 +4051,12 @@ namespace VDISPLAY {
           return;
         }
         output = it->second.virtual_output;
+        mirror = it->second.mirror;
       }
       if (!safe_output_name(output) || classes.empty()) {
         return;
       }
-      const auto contents = platf::window_placement::kwin_script(output, classes, gamescope_pids);
+      const auto contents = platf::window_placement::kwin_script(output, classes, gamescope_pids, mirror);
       if (contents.empty()) {
         return;
       }

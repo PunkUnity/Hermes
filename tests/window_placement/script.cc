@@ -13,5 +13,6 @@ int main(int argc, char **argv) {
   } else if (mode == "invalid-pids") {
     pids = {0, 1};
   }
-  std::cout << platf::window_placement::kwin_script(output, classes, pids);
+  const bool mirror = argc > 3 && std::string_view {argv[3]} == "mirror";
+  std::cout << platf::window_placement::kwin_script(output, classes, pids, mirror);
 }

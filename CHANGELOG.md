@@ -141,6 +141,22 @@ run `scripts/bump-version.sh <major|minor|patch>` — it moves everything under
   from systemd, so Steam's runtime exited with "Can't find session bus" and
   took the session with it. Such a session now runs under `dbus-run-session`,
   as the KWin session already did.
+- The mirror virtual-display layout on KDE shows the whole primary monitor when
+  the stream is smaller than it (from PunkUnity). KWin mirrors by overlap, so a
+  1280x720 stream over a 2560x1440 monitor showed only its top-left quarter, and
+  the Gamescope Steam Session app reached the client cropped and off-centre.
+  Hermes now scales the virtual output (0.5 in that case) so it covers the
+  monitor at any stream resolution, and centres the monitor in it when the
+  shapes differ (a 20:9 phone or a 16:10 tablet over a 16:9 monitor). The other
+  layouts name scale 1, as KWin replays a remembered scale. A Gamescope Hermes
+  starts now covers the mirroring output with a borderless window kept above the
+  panels instead of going fullscreen: KWin makes a window fullscreen on the
+  first output under its centre, the monitor, so a 2992x1344 phone got
+  Gamescope's 20:9 picture squeezed into the monitor's 16:9 and boxed on all
+  four sides. The stream now gets the whole picture, and the monitor shows its
+  middle. A resume at another resolution fits the mirror to the new mode
+  again; it kept the first client's scale, so a 720p client resuming after a
+  2992x1344 one covered only part of the monitor.
 - A game that starts Steam from a detached command (games added with Import
   Games, `setsid steam steam://rungameid/<id>`) now starts in an isolated
   session's stream (from PunkUnity). Hermes recognised Steam only when `cmd`
