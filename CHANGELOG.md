@@ -318,6 +318,13 @@ run `scripts/bump-version.sh <major|minor|patch>` — it moves everything under
   that never matched and answered `00:00:00:00:00:00`, leaving that client
   without Wake-on-LAN.
 - The configuration docs give `address_family`'s real default, `both`.
+- An app that runs in an isolated session on a Hermes-KMS card (Gamescope,
+  or an isolated KWin desktop) gets an SDR monitor when the client asks for
+  SDR. The session card advertised HDR whenever Hermes-KMS was loaded with
+  `hdr_enable`, so Gamescope with Steam turned HDR on even with the client's
+  HDR off. Hermes now connects that output with Hermes-KMS's SDR-only flag
+  (uapi 15); with an older Hermes-KMS it connects the output as before and
+  logs that it could not.
 
 [#95]: https://github.com/MrOz59/Hermes/pull/95
 [#99]: https://github.com/MrOz59/Hermes/pull/99

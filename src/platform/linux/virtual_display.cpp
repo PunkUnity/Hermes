@@ -776,10 +776,10 @@ namespace VDISPLAY {
     constexpr uint32_t session_access_uapi_version = 11;
     constexpr uint32_t dynamic_devices_uapi_version = 12;
     constexpr uint32_t session_lifecycle_uapi_version = 13;
-    /// The newest UAPI this source is written against: ACQUIRE_FRAME2, which
-    /// returns each frame's colour state, arrived in 14. Raise it together
+    /// The newest UAPI this source is written against: SET_OUTPUT's SDR_ONLY
+    /// flag arrived in 15 (ACQUIRE_FRAME2's colour state in 14). Raise it together
     /// with support for whatever a later driver adds.
-    constexpr uint32_t newest_known_uapi_version = 14;
+    constexpr uint32_t newest_known_uapi_version = 15;
     constexpr size_t name_len = 32;
 
     constexpr uint64_t cap_virtual_output = 1ULL << 0;
@@ -801,9 +801,14 @@ namespace VDISPLAY {
     // SESSION_ACCESS takes ROTATE_TOKEN and REVOKE_BINDINGS, GET_STATUS reports
     // bound_fd_count, and GET_METRICS reports the binding counters.
     constexpr uint64_t cap_session_lifecycle = 1ULL << 17;
+    /// SET_OUTPUT accepts set_output_sdr_only (uapi >= 15).
+    constexpr uint64_t cap_sdr_only_output = 1ULL << 19;
     constexpr uint64_t cap_zero_copy_target = 1ULL << 33;
     constexpr uint64_t cap_sync_file = 1ULL << 35;
 
+    /// Connect the output as an SDR monitor even on a card loaded with
+    /// hdr_enable: no HDR block in its EDID, HDR commits refused.
+    constexpr uint32_t set_output_sdr_only = 1U << 0;
     constexpr uint32_t set_output_connected = 1U << 0;
     constexpr uint32_t set_output_owner_assigned = 1U << 1;
     constexpr uint32_t device_role_session = 2U;
@@ -1073,6 +1078,7 @@ namespace VDISPLAY {
       version_t version {};
       caps_t caps {};
       identity_t identity {};
+      bool sdr_only {false};  ///< The claimed output was connected SDR-only.
     };
 
     static std::string cstr(const char *value) {
@@ -1487,9 +1493,10 @@ namespace VDISPLAY {
     }
 
     static bool set_output(int fd, bool enabled, uint32_t width, uint32_t height, uint32_t refresh_hz,
-                           uint64_t &session_id, bool log_failure = true) {
+                           uint64_t &session_id, bool log_failure = true, bool sdr_only = false) {
       set_output_t request {};
       request.enabled = enabled ? 1U : 0U;
+      request.flags = enabled && sdr_only ? set_output_sdr_only : 0U;
       request.width = width;
       request.height = height;
       request.refresh_hz = refresh_hz;
@@ -1619,7 +1626,10 @@ namespace VDISPLAY {
 
     static bool claim_available_output(device_t &device, uint32_t width, uint32_t height,
                                        uint32_t refresh_hz, uint64_t &session_id,
-                                       bool log_failure = true) {
+                                       bool log_failure = true, bool sdr_only = false) {
+      // Only a driver that knows the flag gets it; an older one refuses any flag.
+      sdr_only = sdr_only && (device.caps.flags & cap_sdr_only_output);
+      device.sdr_only = sdr_only;
       const bool select_required = multi_output_requested();
       const uint32_t count = select_required ? output_count(device.caps) : 1U;
       for (uint32_t index = 0; index < count; ++index) {
@@ -1636,7 +1646,7 @@ namespace VDISPLAY {
         uint64_t candidate_session = 0;
         bool enabled = false;
         for (unsigned int attempt = 0; attempt < 6; ++attempt) {
-          if (set_output(device.fd, true, width, height, refresh_hz, candidate_session, false)) {
+          if (set_output(device.fd, true, width, height, refresh_hz, candidate_session, false, sdr_only)) {
             enabled = true;
             break;
           }
@@ -1688,7 +1698,7 @@ namespace VDISPLAY {
      */
     static bool claim_broker_card(device_t &out, uint32_t width, uint32_t height, uint32_t refresh_hz,
                                   uint64_t &session_id, std::string &broker_card,
-                                  std::optional<uid_t> card_owner_uid) {
+                                  std::optional<uid_t> card_owner_uid, bool sdr_only) {
       const auto card = card_broker::create(card_owner_uid);
       if (!card) {
         return false;
@@ -1700,7 +1710,7 @@ namespace VDISPLAY {
         auto devices = open_devices(false);
         for (auto &device : devices) {
           if (device.card_index == card_index &&
-              claim_available_output(device, width, height, refresh_hz, session_id, false)) {
+              claim_available_output(device, width, height, refresh_hz, session_id, false, sdr_only)) {
             out = device;
             device.fd = -1;
             for (auto &remaining : devices) {
@@ -1730,7 +1740,8 @@ namespace VDISPLAY {
       uint32_t refresh_hz,
       uint64_t &session_id,
       std::string &broker_card,
-      std::optional<uid_t> card_owner_uid
+      std::optional<uid_t> card_owner_uid,
+      bool sdr_only
     ) {
       auto devices = open_devices(true);
       for (auto &device : devices) {
@@ -1744,7 +1755,7 @@ namespace VDISPLAY {
           continue;
         }
 
-        if (!claim_available_output(device, width, height, refresh_hz, session_id, false)) {
+        if (!claim_available_output(device, width, height, refresh_hz, session_id, false, sdr_only)) {
           close_device(device);
           continue;
         }
@@ -1758,7 +1769,7 @@ namespace VDISPLAY {
       }
 
       if (card_broker::available()) {
-        return claim_broker_card(out, width, height, refresh_hz, session_id, broker_card, card_owner_uid);
+        return claim_broker_card(out, width, height, refresh_hz, session_id, broker_card, card_owner_uid, sdr_only);
       }
 
       BOOST_LOG(error) << "[VDISPLAY/Hermes-KMS] No independent DRM device/output is free for a new "
@@ -1838,6 +1849,7 @@ namespace VDISPLAY {
     bool using_evdi;       // true while an EVDI display is connected
     bool using_hermes_kms; // true while a Hermes-KMS output owner fd is held
     bool hermes_kms_session_lifecycle; // driver can revoke this session's bindings (uapi >= 13)
+    bool hermes_kms_sdr_only {false}; // connected SDR-only; every later SET_OUTPUT keeps the flag
     std::string broker_card; // configfs card the broker made for this display, empty when pooled
     bool using_hyprland_headless; // true while Hyprland owns a headless output for this display
     std::string connector_name;
@@ -7067,7 +7079,8 @@ namespace VDISPLAY {
     const uuid_util::uuid_t &guid,
     std::optional<uid_t> session_owner_uid,
     virtual_display_layout_e layout,
-    bool isolated_session
+    bool isolated_session,
+    bool sdr_only
   ) {
     std::lock_guard<std::mutex> lifecycle_lock(vdisplay_lifecycle_mutex);
     if (!kscreen::retry_pending_restores()) {
@@ -7130,6 +7143,7 @@ namespace VDISPLAY {
     vdinfo.using_evdi = false;
     vdinfo.using_hermes_kms = false;
     vdinfo.hermes_kms_session_lifecycle = false;
+    vdinfo.hermes_kms_sdr_only = false;
     vdinfo.broker_card.clear();
     vdinfo.using_hyprland_headless = false;
     vdinfo.session_id = 0;
@@ -7240,7 +7254,8 @@ namespace VDISPLAY {
           fps_hz,
           session_id,
           vdinfo.broker_card,
-          session_owner_uid
+          session_owner_uid,
+          sdr_only
         );
       } else if (hermes_kms::open_device(device, true)) {
         claimed = hermes_kms::claim_available_output(
@@ -7288,6 +7303,7 @@ namespace VDISPLAY {
         vdinfo.using_hermes_kms = true;
         vdinfo.hermes_kms_session_lifecycle =
           (device.caps.flags & hermes_kms::cap_session_lifecycle) != 0;
+        vdinfo.hermes_kms_sdr_only = device.sdr_only;
         vdinfo.connector_name = hermes_kms::cstr(device.identity.connector_name);
         display_name = hermes_kms::cstr(device.identity.output_name);
         if (display_name.empty()) {
@@ -7303,7 +7319,12 @@ namespace VDISPLAY {
                         << " session=" << vdinfo.session_id
                         << " requested=" << status.requested_width << 'x' << status.requested_height
                         << '@' << status.requested_refresh_hz
-                        << " flags=0x" << std::hex << status.flags << std::dec;
+                        << " flags=0x" << std::hex << status.flags << std::dec
+                        << (device.sdr_only ? " sdr-only" : "");
+        if (sdr_only && !device.sdr_only) {
+          BOOST_LOG(warning) << "[VDISPLAY/Hermes-KMS] The client asked for SDR, but this Hermes-KMS cannot "
+                                "connect an output as SDR only (uapi 15); a compositor may still turn HDR on.";
+        }
         if (!isolated_session &&
             !vdinfo.connector_name.empty()) {
           kscreen::activate_evdi_output(
@@ -7597,7 +7618,8 @@ namespace VDISPLAY {
           BOOST_LOG(info) << "[VDISPLAY] Reconnecting with " << edid_size << "-byte EDID for " << width << "x" << height;
           evdi.connect(vdinfo.handle, edid, edid_size, 0);
         } else if (vdinfo.using_hermes_kms && vdinfo.drm_fd >= 0) {
-          if (!hermes_kms::set_output(vdinfo.drm_fd, true, width, height, refresh_hz, vdinfo.session_id)) {
+          if (!hermes_kms::set_output(vdinfo.drm_fd, true, width, height, refresh_hz, vdinfo.session_id,
+                                      true, vdinfo.hermes_kms_sdr_only)) {
             return -1;
           }
           // The driver now scans out the new geometry, but the compositor still

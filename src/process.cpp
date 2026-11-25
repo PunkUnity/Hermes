@@ -1755,7 +1755,10 @@ namespace proc {
       launch_session->display_guid,
       session_owner_uid,
       linux_virtual_display_layout(app.virtual_display_layout),
-      isolated_session
+      isolated_session,
+      // An isolated compositor has no host-side HDR switch (the desktop path
+      // has configureVirtualDisplayHdr), so its monitor itself must say SDR.
+      isolated_session && !launch_session->enable_hdr
     );
     if (display_name.empty()) {
       return 503;
