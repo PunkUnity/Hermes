@@ -47,6 +47,28 @@ gpu() {
   done
 }
 
+# Hermes' settings as the test starts: the global ones (secrets left out) and
+# every app's launch settings, so a result can be read against what was set.
+settings() {
+  echo "## Hermes global settings (hermes.conf, secrets left out)"
+  grep -vE '^[[:space:]]*(#|$)' "$HOME/.config/hermes/hermes.conf" 2>/dev/null |
+    grep -viE 'pass|secret|token|cred|key|cert|pin' | sed 's/^/  /'
+  echo "## Apps (apps.json)"
+  jq -r '.apps[] | "  \(.name): " + ([
+      "cmd=\(.cmd // "")",
+      "detached=\((.detached // []) | join(" ; "))",
+      "virtual-display=\(.["virtual-display"] // false)",
+      "layout=\(.["virtual-display-layout"] // "auto")",
+      "isolation=\(.["isolation-method"] // "global")",
+      "steam-mode=\(.["gamescope-steam-mode"] // "auto")",
+      "scale=\(.["scale-factor"] // 100)",
+      "unlock=\(.["unlock-host-session"] // false)",
+      "stop-desktop-steam=\(.["stop-desktop-steam"] // "auto")",
+      "limit-fps=\(.["limit-fps"] // false)",
+      "output=\(.output // "")"
+    ] | join(", "))' "$HOME/.config/hermes/apps.json" 2>/dev/null || echo "  (apps.json not readable)"
+}
+
 reading() {
   echo "## screens"
   env $(desktop_env) kscreen-doctor -o 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' |
@@ -92,6 +114,7 @@ case "${1:-}" in
     rm -rf "$dir"; mkdir -p "$dir"
     date +%s > "$dir/start"
     bash "$here/haven-state.sh" before > "$dir/before.txt" 2>&1
+    settings > "$dir/settings.txt" 2>&1
     wc -l < "$HOME/.local/state/hermes/gamescope.log" > "$dir/gamescope-start" 2>/dev/null || echo 0 > "$dir/gamescope-start"
     wc -l < "$HOME/.config/hermes/hermes.log" > "$dir/log-start" 2>/dev/null || echo 0 > "$dir/log-start"
     nic="$(ip route show default | awk '{print $5; exit}')"
@@ -120,6 +143,7 @@ case "${1:-}" in
     echo "recording for $minutes min (stop early with: bash $here/test-recorder.sh stop)"
     ;;
   reading) reading ;;
+  settings) settings ;;
   layout) layout ;;
   gpu) gpu ;;
   stamp) stamp ;;
@@ -139,7 +163,7 @@ case "${1:-}" in
     since="@$started"
     {
       journalctl --user -u hermes --since "$since" -o short-iso-precise --no-pager -q 2>/dev/null |
-        grep -E 'Positioned|Scaling|Executing|Session (started|resuming|pausing|ended)|CLIENT|Virtual display (created|removed)|Connected HERMES|Removing virtual|IsolatedSession|Application windows go|Inhibited|wake|Error|Warning' |
+        grep -E 'Positioned|Scaling|Executing|Session (started|resuming|pausing|ended)|CLIENT|Virtual display (created|removed)|Connected HERMES|Removing virtual|IsolatedSession|Application windows go|Inhibited|wake|Error|Warning|Display mode for client|Client dynamicRange|Virtual display not requested|launched|Selected audio sink|Color coding' |
         sed -E 's/^([^ ]+) [^ ]+ [^:]+: \[[^]]+\]: /\1 hermes /'
       journalctl -k --since "$since" -o short-iso-precise --no-pager -q 2>/dev/null |
         grep -iE 'drm|dpcd|DP-[0-9]|HDMI|link|hermes_kms|amdgpu' | sed -E 's/^([^ ]+) [^ ]+ kernel: /\1 kernel /'
@@ -170,6 +194,8 @@ PY
     sed -E 's/^[0-9-]+T([0-9:.]{12})[0-9]*[^ ]* /\1 /' "$out/timeline.txt" | cut -c1-170 | tail -80
     echo "=== Gamescope launcher log during the test"
     tail -20 "$out/gamescope.log" 2>/dev/null
+    echo "=== settings at the start (full: $out/settings.txt)"
+    grep -E '^## |isolated|isolation|virtual_display|hdr|headless|fec|bitrate|encoder|capture' "$out/settings.txt" | head -40
     echo "=== host before and after: $out/before.txt $out/after.txt"
     echo "=== Hermes log: sessions, audio, gamepads, displays, warnings and errors"
     grep -E "Session (started|resuming|pausing|ended)|CLIENT|Selected audio sink|default sink|Gamepad|Positioned|Removing virtual|Virtual Display removed|Executing|Spawning|Stopping|\[Gamescope\]|Warning|Error|lost .* video packets|went silent" "$out/hermes.log" |
