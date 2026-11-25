@@ -5,11 +5,14 @@
 
 // standard includes
 #include <csignal>
+#include <cstring>
 #include <fstream>
 #include <future>
 #include <iomanip>
+#include <optional>
 #include <queue>
 #include <system_error>
+#include <utility>
 
 // lib includes
 #include <boost/endian/arithmetic.hpp>
@@ -575,6 +578,82 @@ namespace stream {
 
   static auto broadcast = safe::make_shared<broadcast_ctx_t>(start_broadcast, end_broadcast);
 
+  /**
+   * @brief Split a received control packet into its type and payload.
+   *
+   * The type is the packet's first two bytes, so a shorter packet has none.
+   * @return The type and the bytes after it, or `std::nullopt` for a runt.
+   */
+  std::optional<std::pair<std::uint16_t, std::string_view>> parse_control_packet(const std::uint8_t *data, std::size_t size) {
+    if (data == nullptr || size < sizeof(std::uint16_t)) {
+      return std::nullopt;
+    }
+
+    std::uint16_t type;
+    std::memcpy(&type, data, sizeof(type));
+    return std::pair {type, std::string_view {reinterpret_cast<const char *>(data) + sizeof(type), size - sizeof(type)}};
+  }
+
+  /**
+   * @brief An encrypted control message: its sequence number and tagged cipher.
+   */
+  struct encrypted_control_t {
+    std::uint32_t seq;
+    std::string_view tagged_cipher;
+  };
+
+  /**
+   * @brief Read an encrypted control message from the payload after its type.
+   *
+   * The header's length counts the sequence number, the 16-byte GCM tag and
+   * the encrypted type and length; the client writes it, so it must also fit
+   * in the bytes that actually arrived.
+   * @return The message, or `std::nullopt` when it is too short or claims
+   *         more bytes than were received.
+   */
+  std::optional<encrypted_control_t> parse_encrypted_control(std::string_view payload) {
+    constexpr std::size_t header_size = sizeof(control_encrypted_t) - sizeof(control_encrypted_t::encryptedHeaderType);
+    if (payload.size() < header_size) {
+      return std::nullopt;
+    }
+
+    std::uint16_t length;
+    std::uint32_t seq;
+    std::memcpy(&length, payload.data(), sizeof(length));
+    std::memcpy(&seq, payload.data() + sizeof(length), sizeof(seq));
+    length = util::endian::little(length);
+
+    constexpr std::size_t minimum = sizeof(seq) + crypto::cipher::tag_size + sizeof(std::uint16_t) * 2;
+    if (length < minimum || length - sizeof(seq) > payload.size() - header_size) {
+      return std::nullopt;
+    }
+
+    return encrypted_control_t {util::endian::little(seq), payload.substr(header_size, length - sizeof(seq))};
+  }
+
+  /**
+   * @brief Read the tagged cipher of a legacy input message.
+   *
+   * Before the encrypted control stream, input arrived as a big-endian 32-bit
+   * length and that many bytes of tagged cipher; the length must fit in what
+   * arrived.
+   * @return The tagged cipher, or `std::nullopt` when it doesn't fit.
+   */
+  std::optional<std::string_view> parse_legacy_input(std::string_view payload) {
+    std::int32_t length;
+    if (payload.size() < sizeof(length)) {
+      return std::nullopt;
+    }
+
+    std::memcpy(&length, payload.data(), sizeof(length));
+    length = util::endian::big(length);
+    if (length < 0 || static_cast<std::size_t>(length) > payload.size() - sizeof(length)) {
+      return std::nullopt;
+    }
+
+    return payload.substr(sizeof(length), static_cast<std::size_t>(length));
+  }
+
   session_t *control_server_t::get_session(const net::peer_t peer, uint32_t connect_data) {
     {
       // Fast path - look up existing session by peer
@@ -685,10 +764,11 @@ namespace stream {
               log_client_silence(*session, *silence);
             }
 
-            auto type = *(std::uint16_t *) packet->data;
-            std::string_view payload {(char *) packet->data + sizeof(type), packet->dataLength - sizeof(type)};
-
-            call(type, session, payload, false);
+            if (const auto message = parse_control_packet(packet->data, packet->dataLength)) {
+              call(message->first, session, message->second, false);
+            } else {
+              BOOST_LOG(warning) << "Control: dropping a packet too short for its type"sv;
+            }
           }
           break;
         case ENET_EVENT_TYPE_CONNECT:
@@ -1109,8 +1189,13 @@ namespace stream {
     server->map(packetTypes[IDX_INPUT_DATA], [&](session_t *session, const std::string_view &payload) {
       BOOST_LOG(debug) << "type [IDX_INPUT_DATA]"sv;
 
-      auto tagged_cipher_length = util::endian::big(*(int32_t *) payload.data());
-      std::string_view tagged_cipher {payload.data() + sizeof(tagged_cipher_length), (size_t) tagged_cipher_length};
+      const auto message = parse_legacy_input(payload);
+      if (!message) {
+        BOOST_LOG(warning) << "Control: input with a length beyond the bytes received"sv;
+        return;
+      }
+      const auto tagged_cipher = *message;
+      const auto tagged_cipher_length = tagged_cipher.size();
 
       std::vector<uint8_t> plaintext;
 
@@ -1186,18 +1271,14 @@ namespace stream {
     server->map(packetTypes[IDX_ENCRYPTED], [server](session_t *session, const std::string_view &payload) {
       BOOST_LOG(verbose) << "type [IDX_ENCRYPTED]"sv;
 
-      auto header = (control_encrypted_p) (payload.data() - 2);
-
-      auto length = util::endian::little(header->length);
-      auto seq = util::endian::little(header->seq);
-
-      if (length < (16 + 4 + 4)) {
-        BOOST_LOG(warning) << "Control: Runt packet"sv;
+      const auto message = parse_encrypted_control(payload);
+      if (!message) {
+        BOOST_LOG(warning) << "Control: Runt packet, or a length beyond the bytes received"sv;
         return;
       }
 
-      auto tagged_cipher_length = length - 4;
-      std::string_view tagged_cipher {(char *) header->payload(), (size_t) tagged_cipher_length};
+      const auto seq = message->seq;
+      const auto tagged_cipher = message->tagged_cipher;
 
       auto &cipher = session->control.cipher;
       auto &iv = session->control.incoming_iv;
