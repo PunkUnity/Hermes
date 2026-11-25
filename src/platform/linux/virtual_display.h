@@ -268,6 +268,11 @@ namespace VDISPLAY {
    *        both connectors in one logical monitor - which it only accepts when
    *        they advertise the same mode size, so mirroring there runs the
    *        stream at the physical monitor's resolution.
+   * @param sdr_only For an isolated session's Hermes-KMS card: connect the
+   *        output as an SDR monitor (no HDR in its EDID, HDR commits refused),
+   *        so a compositor that turns HDR on whenever the monitor offers it
+   *        honours a client that asked for SDR. Needs Hermes-KMS uapi 15;
+   *        older drivers connect the output as before.
    * @return The name of the created virtual display, or empty string on failure.
    */
   std::string createVirtualDisplay(
@@ -279,7 +284,8 @@ namespace VDISPLAY {
     const uuid_util::uuid_t &guid,
     std::optional<uid_t> session_owner_uid = std::nullopt,
     virtual_display_layout_e layout = virtual_display_layout_e::extend,
-    bool isolated_session = false
+    bool isolated_session = false,
+    bool sdr_only = false
   );
 
   /**
