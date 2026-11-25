@@ -107,7 +107,6 @@ namespace proc {
     /// virtual_display applies to every client, overriding the client's own
     /// choice. Unset, it is the default for clients that make none.
     bool force_virtual_display {false};
-    bool virtual_display_primary;
     bool use_app_identity;
     bool per_client_app_identity;
     bool allow_client_commands;
