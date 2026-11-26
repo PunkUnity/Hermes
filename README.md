@@ -102,6 +102,7 @@ Hermes exposes Hestia protocol v1 endpoints under:
 ```
 
 - `GET /api/hestia/v1/capabilities` (also answered at `GET /api/hestia/v1`)
+- `GET /api/hestia/v1/apps/settings`
 - `POST /api/hestia/v1/session/prepare`
 - `POST /api/hestia/v1/session/stop`
 - `GET /api/hestia/v1/display/status`

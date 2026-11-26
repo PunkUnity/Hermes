@@ -105,4 +105,7 @@
  *
  * @section post-api-hestia-v1-session-prepare POST /api/hestia/v1/session/prepare
  * @copydoc confighttp::prepare_hestia_session()
+ *
+ * @section get-api-hestia-v1-apps-settings GET /api/hestia/v1/apps/settings
+ * @copydoc confighttp::get_hestia_app_settings()
  */
