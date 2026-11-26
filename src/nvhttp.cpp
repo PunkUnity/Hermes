@@ -91,6 +91,32 @@ namespace nvhttp {
     }
   }  // namespace
 
+  nlohmann::json describe_app_settings() {
+    const bool isolated = experimental_isolated_sessions_enabled();
+    nlohmann::json apps = nlohmann::json::array();
+    for (const auto &app : proc::proc.get_apps()) {
+      const auto own_display = [&](bool virtual_display) {
+        return proc::resolve_session_route(app, isolated, virtual_display, config::video.isolation_method) !=
+               proc::session_route_e::shared;
+      };
+      apps.push_back({
+        {"id", app.id},
+        {"name", app.name},
+        {"virtual_display", {{"value", app.virtual_display}, {"forced", app.force_virtual_display}}},
+        {"scale_factor", {{"value", app.scale_factor}, {"forced", app.force_scale_factor}}},
+        {"virtual_display_layout", app.virtual_display_layout},
+        {"own_display", own_display(false) ? "always" : own_display(true) ? "with_virtual_display" : "never"},
+      });
+    }
+    return {
+      {"apps", std::move(apps)},
+      {"host", {
+        {"headless", config::video.headless_mode},
+        {"default_scale_factor", config::video.default_scale_factor},
+      }},
+    };
+  }
+
   nlohmann::json describe_applied_settings(const std::string &app_id, bool virtual_display, int scale_factor) {
     const auto apps = proc::proc.get_apps();
     const auto app = std::find_if(apps.begin(), apps.end(), [&](const proc::ctx_t &candidate) {

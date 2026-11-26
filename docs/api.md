@@ -191,6 +191,14 @@ values and the `source` that decided (`client`, `app_forced`, `app`,
 `host_default`, `headless` or `isolated_session`). The client's choice wins
 unless an app forces its own setting; a client can show where that happened.
 
+### GET /api/hestia/v1/apps/settings
+List the host's per-app settings that compete with the client's own, so the
+client can show what its settings will change before it launches: for each
+app, `virtual_display` and `scale_factor` as `{"value", "forced"}`,
+`virtual_display_layout`, and `own_display` (`always`, `with_virtual_display`
+or `never`), plus the host's `headless` and `default_scale_factor`. Requires
+the `list` permission. Advertised as the `app_settings` feature.
+
 ### POST /api/hestia/v1/session/stop
 Clear this client's prepared session and stop the stream it owns, if one is
 running. Requires the `launch` permission.

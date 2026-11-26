@@ -1726,6 +1726,7 @@ namespace confighttp {
         {"server_commands", true},
         {"clipboard_sync", platf::clipboard_available()},
         {"permission_system", true},
+        {"app_settings", true},
       }},
       {"limits", {
         {"max_width", 7680},
@@ -1969,6 +1970,26 @@ namespace confighttp {
       BOOST_LOG(error) << "[HestiaAPI] session prepare failed: " << e.what();
       send_hestia_error(response, SimpleWeb::StatusCode::server_error_internal_server_error, "internal_error", "Unable to prepare session");
     }
+  }
+
+  /**
+   * @brief List the host's per-app settings that compete with a client's own.
+   *
+   * For each app: `virtual_display` and `scale_factor` as `{"value",
+   * "forced"}` (a forced setting applies to every client; otherwise it is the
+   * default for clients that don't choose), `virtual_display_layout`, and
+   * `own_display` (`always`, `with_virtual_display` or `never`). `host` has
+   * `headless` and `default_scale_factor`. Lets a client show, before a
+   * launch, what its own settings will and won't change. Requires the `list`
+   * permission.
+   */
+  void get_hestia_app_settings(resp_https_t response, req_https_t request) {
+    if (!authenticate_hestia_client(response, request, crypto::PERM::list, "app settings")) {
+      return;
+    }
+    auto output = nvhttp::describe_app_settings();
+    output["ok"] = true;
+    send_response(response, output);
   }
 
   void stop_hestia_session(resp_https_t response, req_https_t request) {
@@ -4232,6 +4253,7 @@ fi')CLIP";
     server.resource["^/api/clipboard/install$"]["POST"] = installClipboard;
     server.resource["^/api/hestia/v1/?$"]["GET"] = getHestiaCapabilities;
     server.resource["^/api/hestia/v1/capabilities$"]["GET"] = getHestiaCapabilities;
+    server.resource["^/api/hestia/v1/apps/settings$"]["GET"] = get_hestia_app_settings;
     server.resource["^/api/hestia/v1/session/prepare$"]["POST"] = prepare_hestia_session;
     server.resource["^/api/hestia/v1/session/stop$"]["POST"] = stop_hestia_session;
     server.resource["^/api/hestia/v1/display/status$"]["GET"] = get_hestia_display_status;

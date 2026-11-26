@@ -121,6 +121,17 @@ namespace nvhttp {
    */
   nlohmann::json describe_applied_settings(const std::string &app_id, bool virtual_display, int scale_factor);
 
+  /**
+   * The host's settings for every app that compete with a client's own, so a
+   * client can show them before it launches anything: for each app its id,
+   * name, `virtual_display` and `scale_factor` as {"value", "forced"}, its
+   * `virtual_display_layout`, and `own_display` ("always" when it runs on a
+   * display of its own whatever is asked, "with_virtual_display" when asking
+   * for a virtual display isolates it, or "never"). `host` carries
+   * `headless` and `default_scale_factor`.
+   */
+  nlohmann::json describe_app_settings();
+
   /** Remove any unconsumed preparation hints for a paired client. */
   void clear_hestia_session_prepare(const std::string &client_uuid);
 

@@ -116,6 +116,10 @@ run `scripts/bump-version.sh <major|minor|patch>` — it moves everything under
 - Hestia's `session/prepare` response reports `settings`: for the virtual
   display and the resolution scale, what was requested, what the launch will
   apply, and who decided, so Hestia can say when a host app overrides it.
+- `GET /api/hestia/v1/apps/settings` (feature `app_settings`, `list`
+  permission): each app's virtual display and resolution scale, whether they
+  are forced, its layout and whether it runs on a display of its own, so
+  Hestia can show before a launch what its own settings will change.
 
 ### Changed
 - Record the modularization dependency/lifecycle baseline and enable existing
