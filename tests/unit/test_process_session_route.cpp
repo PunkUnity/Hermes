@@ -84,6 +84,8 @@ TEST(ProcessSessionRoute, ClientScaleWinsUnlessTheAppForcesIt) {
   scale = proc::decide_scale_factor(app, launch, 125);
   EXPECT_EQ(scale.percent, 150);
   EXPECT_EQ(scale.source, proc::scale_factor_source_e::app_forced);
+}
+
 TEST(ProcessSessionRoute, GamescopeBesideTheMonitorsNeedsWindowPlacement) {
   // KWin moves Gamescope's window onto the virtual display: extend stays extend.
   EXPECT_EQ(proc::effective_virtual_display_layout("extend", true, true), "extend");
