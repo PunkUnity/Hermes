@@ -233,6 +233,18 @@ namespace proc {
     std::string_view global_method = "gamescope"
   );
 
+  /**
+   * The virtual display layout a launch uses. It is the app's, except that
+   * "extend" or "detached" (beside the physical monitors) for an app that
+   * runs Gamescope becomes "mirror" when the compositor cannot move windows
+   * onto the virtual display: nested Gamescope is a window the compositor
+   * opens on the primary monitor, and only KWin's placement script moves it.
+   */
+  std::string effective_virtual_display_layout(const std::string &layout, bool opens_gamescope, bool compositor_places_windows);
+
+  /** Whether the app's command starts Gamescope, or the client asked for its Gamescope launch mode. */
+  bool app_opens_gamescope(const ctx_t &app, std::string_view launch_mode);
+
   /** Rename session-type to isolation-method in a parsed apps.json. */
   void migration_v7(nlohmann::json &fileTree);
 

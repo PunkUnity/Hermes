@@ -159,6 +159,14 @@ run `scripts/bump-version.sh <major|minor|patch>` — it moves everything under
   calls `localhost`.
 
 ### Fixed
+- The Gamescope Steam Session app fills the client's screen on KDE. It shipped
+  with the `mirror` layout, where Gamescope takes the physical monitor's size,
+  so a phone got a 16:9 picture with the desktop showing beside it. It now
+  ships with `extend`, where KWin's placement script puts the Gamescope window
+  on the virtual display at the client's size. On compositors that cannot move
+  the window, `extend` or `detached` for an app that runs Gamescope falls back
+  to `mirror`, with a log line. Existing apps keep their layout; with `mirror`
+  on KDE the log suggests `extend`.
 - The Gamescope Steam Session app starts in an isolated session (from
   PunkUnity). It failed with error 503 ("Compositor exited before scanout
   became ready") for two reasons. Hermes stops the desktop's Steam before an

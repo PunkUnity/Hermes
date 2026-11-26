@@ -84,6 +84,31 @@ TEST(ProcessSessionRoute, ClientScaleWinsUnlessTheAppForcesIt) {
   scale = proc::decide_scale_factor(app, launch, 125);
   EXPECT_EQ(scale.percent, 150);
   EXPECT_EQ(scale.source, proc::scale_factor_source_e::app_forced);
+TEST(ProcessSessionRoute, GamescopeBesideTheMonitorsNeedsWindowPlacement) {
+  // KWin moves Gamescope's window onto the virtual display: extend stays extend.
+  EXPECT_EQ(proc::effective_virtual_display_layout("extend", true, true), "extend");
+  EXPECT_EQ(proc::effective_virtual_display_layout("detached", true, true), "detached");
+  // Elsewhere the window stays on the primary monitor: mirror it instead.
+  EXPECT_EQ(proc::effective_virtual_display_layout("extend", true, false), "mirror");
+  EXPECT_EQ(proc::effective_virtual_display_layout("detached", true, false), "mirror");
+  // Layouts that don't depend on placement, and apps that aren't Gamescope, keep theirs.
+  EXPECT_EQ(proc::effective_virtual_display_layout("primary", true, false), "primary");
+  EXPECT_EQ(proc::effective_virtual_display_layout("exclusive", true, false), "exclusive");
+  EXPECT_EQ(proc::effective_virtual_display_layout("auto", true, false), "auto");
+  EXPECT_EQ(proc::effective_virtual_display_layout("extend", false, false), "extend");
+}
+
+TEST(ProcessSessionRoute, RecognisesGamescopeApps) {
+  proc::ctx_t app {};
+  app.cmd = "hermes-gamescope-launch";
+  EXPECT_TRUE(proc::app_opens_gamescope(app, "normal"));
+  app.cmd = "gamescope -W 1920 -H 1080 -- steam";
+  EXPECT_TRUE(proc::app_opens_gamescope(app, "normal"));
+  app.cmd = "steam steam://open/bigpicture";
+  EXPECT_FALSE(proc::app_opens_gamescope(app, "normal"));
+  EXPECT_TRUE(proc::app_opens_gamescope(app, "gamescope"));
+  app.cmd = "unterminated 'quote";
+  EXPECT_FALSE(proc::app_opens_gamescope(app, "normal"));
 }
 
 TEST(ProcessSessionRoute, DisabledCapabilityAlwaysUsesHost) {

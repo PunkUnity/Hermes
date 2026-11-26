@@ -45,12 +45,14 @@ and applications to Hermes.
 > On Linux, the **Gamescope Steam Session** entry is the counterpart: `hermes-gamescope-launch` starts Steam Big
 > Picture inside a Gamescope compositor of its own at the resolution the client asked for. Gamescope runs *nested* —
 > a fullscreen window of the desktop compositor, which would normally place that window on the primary monitor. The
-> entry therefore ships with `virtual-display-layout: mirror`, which makes Hermes position the virtual display over
-> the primary output, so the desktop (and the Gamescope window on it) is cloned into the stream. Set the app's
-> `virtual-display-layout` to `primary` to keep the monitors on but make the virtual display the primary one, so
-> games launched from Big Picture open in the stream, or to `exclusive` to hand the desktop to the virtual display and turn the
-> physical monitors off for the session (native resolution, no clone), or to `extend` for the default side-by-side
-> placement. Gamescope's own log is at `~/.local/state/hermes/gamescope.log`. A Steam already running on the
+> entry ships with `virtual-display-layout: extend`: on KDE, Hermes' KWin placement script moves the Gamescope window
+> onto the virtual display beside your monitors, so Gamescope runs at the client's size and fills its screen. Other
+> compositors cannot move the window, so there Hermes uses `mirror` instead (and says so in the log): the virtual
+> display is placed over the primary output and the desktop, Gamescope window included, is cloned into the stream,
+> at the monitor's shape. Set the app's `virtual-display-layout` to `primary` to keep the monitors on but make the
+> virtual display the primary one, so games launched from Big Picture open in the stream, or to `exclusive` to hand
+> the desktop to the virtual display and turn the physical monitors off for the session. `mirror` on KDE also works,
+> but Gamescope then takes the monitor's size. Gamescope's own log is at `~/.local/state/hermes/gamescope.log`. A Steam already running on the
 > desktop is shut down first (`stop-desktop-steam`, below): Gamescope's Steam would hand its request to it and exit.
 >
 > Keeping this entry is still useful for the opposite case: reaching the Steam on the host's own desktop.
