@@ -149,7 +149,41 @@ namespace proc {
              session_route_e::isolated_application;
   }
 
+  std::string effective_virtual_display_layout(const std::string &layout, bool opens_gamescope, bool compositor_places_windows) {
+    if (opens_gamescope && !compositor_places_windows && (layout == "extend" || layout == "detached")) {
+      return "mirror";
+    }
+    return layout;
+  }
+
+  bool app_opens_gamescope(const ctx_t &app, std::string_view launch_mode) {
+    if (launch_mode == "gamescope") {
+      return true;
+    }
+    try {
+      return platf::window_placement::launches_gamescope(boost::program_options::split_unix(app.cmd));
+    } catch (const std::exception &) {
+      return false;
+    }
+  }
+
   namespace {
+    /** The app's layout for this launch, under effective_virtual_display_layout(). */
+    std::string launch_virtual_display_layout(const ctx_t &app, const rtsp_stream::launch_session_t &launch_session) {
+      const bool gamescope = app_opens_gamescope(app, launch_session.launch_mode);
+      const bool kwin = VDISPLAY::sessionCompositor() == VDISPLAY::compositor_e::kwin;
+      const auto layout = effective_virtual_display_layout(app.virtual_display_layout, gamescope, kwin);
+      if (layout != app.virtual_display_layout) {
+        BOOST_LOG(info) << "[VDISPLAY] [" << app.name << "] runs Gamescope with layout '" << app.virtual_display_layout
+                        << "', but this compositor cannot move its window onto the virtual display; mirroring the "
+                           "primary monitor instead.";
+      } else if (gamescope && kwin && layout == "mirror") {
+        BOOST_LOG(info) << "[VDISPLAY] [" << app.name << "] runs Gamescope with layout 'mirror': Gamescope takes the "
+                           "monitor's size, so the stream may not fill the client's screen. 'extend' fits it on KDE.";
+      }
+      return layout;
+    }
+
     VDISPLAY::virtual_display_layout_e linux_virtual_display_layout(const std::string &layout) {
       if (layout == "mirror") {
         return VDISPLAY::virtual_display_layout_e::mirror;
@@ -1754,7 +1788,7 @@ namespace proc {
       target_fps,
       launch_session->display_guid,
       session_owner_uid,
-      linux_virtual_display_layout(app.virtual_display_layout),
+      linux_virtual_display_layout(launch_virtual_display_layout(app, *launch_session)),
       isolated_session
     );
     if (display_name.empty()) {
@@ -3514,7 +3548,7 @@ namespace proc {
         // desktop without intentionally rewriting physical-output state, and
         // "auto" follows the global exclusive option. Any explicit non-exclusive
         // placement also disables the global exclusive option for this session.
-        const std::string &vd_layout = _app.virtual_display_layout;
+        const std::string vd_layout = launch_virtual_display_layout(_app, *launch_session);
         const bool vd_layout_explicit =
           vd_layout == "extend" || vd_layout == "primary" || vd_layout == "detached" || vd_layout == "mirror";
         const bool want_exclusive = vd_layout == "exclusive" ||
